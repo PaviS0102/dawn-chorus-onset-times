@@ -1,0 +1,81 @@
+---
+title: "03_dag"
+output: html_document
+---
+
+# DAG
+
+In this script, we will create a directed acyclic graph and test the DAG-data consistency.
+
+## Install required libraries
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(vegan)
+library(dagitty)
+library(ggdag)
+library(visreg)
+library(patchwork)
+library(ggplot2)
+library(extrafont)
+library(showtext)
+```
+
+## Creating an acyclic graph of the conceptual model
+```{r}
+windowsFonts(A = windowsFont("Century Gothic")) #font for the plots
+
+dag <- dagify ('onset_times' ~ 'Territoriality' + 'Peak_Frequency' + 'Eye_Size' + 'Light', 
+              'Territoriality' ~ 'Communal_Signalling',
+              'Peak_Frequency' ~ 'Body_Mass',
+              'Light' ~ 'Vegetation_Structure' + 'Season',
+              'Eye_Size' ~ 'Body_Mass' + 'Vegetation_Structure', 
+              'Foraging_Height' ~ 'Vegetation_Structure' + 'Light' + 'Trophic_Niche',
+              'Trophic_Niche' ~ 'Eye_Size',
+              outcome = 'onset_times')
+
+dag_colliders <- node_collider(dag) #displays a column indicating collier and non-collider variables
+
+set.seed (123) #to ensure reprodubility with layout
+
+dag_plot <- dag %>%
+  ggdag_collider (node_size = 20, layout = 'nicely') +
+  #geom_dag_node (values = c(Collider = "lightblue", Non-Collider = "orange")) +
+  geom_dag_node (aes (color = colliders, fill = )) +
+  scale_colour_manual(values = c("Collider" = "orange", "Non-Collider" = "lightblue")) +
+  geom_dag_point (size = 5) +
+  geom_dag_edges(
+    edge_colour = "black",
+    edge_width = 1) +
+  geom_dag_text (family = "A", color = 'black', size = 5, fontface = 1) +
+ theme(legend.title = element_blank (), 
+       axis.text =  element_text(size = 20, family = "A", colour = "black"),
+       axis.title = element_text (size =20, family = "A", colour = "black"), 
+       legend.text = element_text(size = 20, family = "A", colour = "black")) 
+  
+#ggsave(dag_plot, filename = "figs/dag_plot.png", width = 36, height = 18, device = png, units = "in", dpi = 300)- code doesn't save the figure with Century Gothic font
+#dev.off()
+
+
+adjustmentSets(dag, exposure = "Trophic_Niche", outcome = "onset_times") #eye size
+adjustmentSets(dag, exposure = "Territoriality", outcome = "onset_times") #none
+adjustmentSets(dag, exposure = "Foraging_Height", outcome = "onset_times") #Eye Size * Light * Peak Frequency + Body Mass * Eye Size * Light + Eye Size * Light * Vegetation Structure + Light * Trophic Niche * Vegetation Structure
+adjustmentSets(dag, exposure = "Eye_Size", outcome = "onset_times") #Light * Peak Frequency + Peak Frequency * Vegetation Structure + Body mass * Light + Body mass * Vegetation structure
+adjustmentSets(dag, exposure = "Vegetation_Structure", outcome = "onset_times") #none
+adjustmentSets(dag, exposure = "Season", outcome = "onset_times") #none
+adjustmentSets(dag, exposure = "Peak_Frequency", outcome = "onset_times") #Eye Size * Light + Eye Size * Vegetation Structure + Body Mass
+adjustmentSets(dag, exposure = "Light", outcome = "onset_times") #Eye Size * Peak Frequency + Body mass * Eye Size + Vegetation Structure
+```
+
+## Reading the required data
+```{r}
+data <- read.csv ('results/data.csv') #season, light (time as proxy), 
+territoriality <- read.csv ('data/territoriality-&-sociality-data.csv')
+eye_size <- read.csv ('data/Ritland_eyes_raw_FINAL.csv')
+traits <- read.csv ('data/species-trait-dat.csv') #body mass, trophic niche, foraging height
+vegetation_structure <- read.csv ('data/2020-vegetation-data.csv')
+```
+
+## Structuring the data
