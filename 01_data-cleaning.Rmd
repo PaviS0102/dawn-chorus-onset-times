@@ -36,10 +36,10 @@ summer_data <- do.call(bind_rows, txt_files) #combining all of them to create a 
 
 #extracting site_code from begin.path and renaming the columns
 summer_data<- summer_data %>% 
-  separate_wider_delim(Begin.Path, delim = "\\", names = c("drive", "season", "site_code", "date_site")) %>% #splitting the begin path to 4 columns: drive, season (+year), site_code, date_site
+  separate_wider_delim(Begin.Path, delim = "\\", names = c("drive", "season", "site_code", "date_site"),  cols_remove = FALSE) %>% #splitting the begin path to 4 columns: drive, season (+year), site_code, date_site
   separate_wider_delim(season, delim = '-', names = c("year", "season")) %>% #extracting a separate column for season
-  dplyr::select(-End.Date, -year, -date_site, -drive, -Min.Amp..U., -Max.Amp..U., Peak.Amp..U.) %>% #removing unwanted columns
-  rename (., begin_time = Begin.Time..s., end_time = End.Time..s., low_Freq = Low.Freq..Hz., high_freq = High.Freq..Hz., file_offset = File.Offset..s., peak_freq = Peak.Freq..Hz., center_freq = Center.Freq..Hz., delta_freq = Delta.Freq..Hz., BW_90 = BW.90...Hz., delta_time = Delta.Time..s., dur_90 = Dur.90...s., date = Begin.Date, begin_clock_time = Begin.Clock.Time, end_clock_time = End.Clock.Time) #renaming the columns
+  dplyr::select(-End.Date, -year, -drive, -Min.Amp..U., -Max.Amp..U., Peak.Amp..U.) %>% #removing unwanted columns
+  rename (., begin_time = Begin.Time..s., end_time = End.Time..s., low_Freq = Low.Freq..Hz., high_freq = High.Freq..Hz., file_offset = File.Offset..s., peak_freq = Peak.Freq..Hz., center_freq = Center.Freq..Hz., delta_freq = Delta.Freq..Hz., BW_90 = BW.90...Hz., delta_time = Delta.Time..s., dur_90 = Dur.90...s., date = Begin.Date, begin_clock_time = Begin.Clock.Time, end_clock_time = End.Clock.Time, filename = date_site) #renaming the columns
 
 #arranging by time and then removing duplicates (multiple annotations of the same species at the same site and day)
 summer_data <- summer_data %>% 
@@ -64,10 +64,10 @@ winter_data <- do.call(bind_rows, txt_files)
 
 #extracting site_code from begin.path and renaming the columns
 winter_data<- winter_data %>% 
-  separate_wider_delim(Begin.Path, delim = "\\", names = c("drive", "season", "site_code", "date_site")) %>% 
+  separate_wider_delim(Begin.Path, delim = "\\", names = c("drive", "season", "site_code", "date_site"), cols_remove = FALSE) %>% 
   separate_wider_delim(season, delim = '-', names = c("year", "season")) %>% 
-  dplyr::select(-End.Date, -year, -date_site, -drive, -Min.Amp..U., -Max.Amp..U., Peak.Amp..U.) %>% 
-  rename (., begin_time = Begin.Time..s., end_time = End.Time..s., low_Freq = Low.Freq..Hz., high_freq = High.Freq..Hz., file_offset = File.Offset..s., peak_freq = Peak.Freq..Hz., center_freq = Center.Freq..Hz., delta_freq = Delta.Freq..Hz., BW_90 = BW.90...Hz., delta_time = Delta.Time..s., dur_90 = Dur.90...s., date = Begin.Date, begin_clock_time = Begin.Clock.Time, end_clock_time = End.Clock.Time) 
+  dplyr::select(-End.Date, -year, -drive, -Min.Amp..U., -Max.Amp..U., Peak.Amp..U.) %>% 
+  rename (., begin_time = Begin.Time..s., end_time = End.Time..s., low_Freq = Low.Freq..Hz., high_freq = High.Freq..Hz., file_offset = File.Offset..s., peak_freq = Peak.Freq..Hz., center_freq = Center.Freq..Hz., delta_freq = Delta.Freq..Hz., BW_90 = BW.90...Hz., delta_time = Delta.Time..s., dur_90 = Dur.90...s., date = Begin.Date, begin_clock_time = Begin.Clock.Time, end_clock_time = End.Clock.Time, filename = date_site) 
 
 
 #arranging by time and then removing duplicates (multiple annotations of the same species at the same site and day)
@@ -87,5 +87,10 @@ winter_data <- winter_data %>%
 
 ```{r}
 data <- bind_rows (summer_data, winter_data) #final data
+
+uk_annotations <- data %>%
+  filter (species == 'UK')
+
+write.csv (uk_annotations, 'uk_annotations.csv')
 ```
 
