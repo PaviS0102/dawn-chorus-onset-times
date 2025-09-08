@@ -53,8 +53,7 @@ summer_data <- summer_data %>%
                                species == 'GRWA' ~ 'GRNW',
                                TRUE ~ species)) #keep other species unchanged
 
-
-# Repeating the above steps with the winter data:
+ # Repeating the above steps with the winter data:
 
 #reading and combining selection tables 
 winter_directory <- "C:/Users/pavit/OneDrive/Desktop/PD_WG_Project/ANH_restoration/dawn-chorus-onset-times/data/winter_dawn_chorus"
@@ -86,11 +85,8 @@ winter_data <- winter_data %>%
 ## Combining the data from both the seasons
 
 ```{r}
-data <- bind_rows (summer_data, winter_data) #final data
+annotations <- bind_rows (summer_data, winter_data) #final data
 
-uk_annotations <- data %>%
-  filter (species == 'UK')
-
-write.csv (uk_annotations, 'uk_annotations.csv')
+write.csv (annotations, 'results/data.csv')
 ```
 
