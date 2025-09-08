@@ -1,0 +1,82 @@
+---
+editor_options: 
+  chunk_output_type: console
+---
+
+# Eye size analyses 
+
+In this script, we will compare the eye size estimates obtained using eBird photos with Ausprey & Stanley 2024's eye morphology dataset from preserved museum specimens.
+
+## Install required libraries  
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(vegan)
+library(ggplot2)
+library(scico)
+library(data.table)
+library(extrafont)
+library(sf)
+library(raster)
+library(ggpubr)
+```
+
+## Loading the data
+
+```{r}
+species_traits <- read.csv ('data/species-trait-dat.csv') #to obtain the list of required species
+A_S_eyes_dataset <- read.csv ('data/Ritland_eyes_raw_FINAL.csv') #file with museum-derived eye size measurements
+ebird_eyes_dataset <- read.csv ('data/Eye_size_test_analyses.csv') #file with eBird photo-derived eye size measurements
+```
+
+## Obtaining a list of species that are present in the eye size dataset- this is only for our reference
+
+```{r}
+species_there <- data.frame (scientific_name = intersect (species_traits$scientific_name, A_S_eyes_dataset$species_jetz))
+
+sp_list_on_A_S <- inner_join (species_traits, species_there, by = 'scientific_name') 
+```
+
+## Cleaning the eye size data obtained from eBird photos
+
+```{r}
+ebird_eye_size <- ebird_eyes_dataset %>%
+  rename (scientific_name = species) %>% #renaming for easier analyses
+  dplyr::select (scientific_name, Eye_Size_in_mm_averaged) %>% #retaining only select columns
+  filter (!(scientific_name == 'Hypsipetes ganeesa')) %>%
+  group_by (scientific_name) %>%
+  summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) #obtaining the mean eye size measurements for our species
+```
+
+## Filtering the required species and obtaining the optical axial diameter measurements for each species (From Ausprey and Stanley's dataset)
+
+```{r}
+A_S_eye_size <- A_S_eyes_dataset %>%
+  rename (scientific_name = species_jetz) %>% #renaming for easier analyses
+  dplyr::select (scientific_name, AD) %>% #retaining only select columns
+  filter (scientific_name %in% ebird_eye_size$scientific_name) %>% #filtering the required species
+  group_by (scientific_name) %>%
+  summarize (mean_AD = mean (AD)) #obtaining the mean axial diameter measurements for our species
+```
+
+## Correlation between eye size estimates obtained from ebird and Ausprey & Stanley
+
+```{r}
+eye_size_estimates <- left_join (ebird_eye_size, A_S_eye_size, by = 'scientific_name') #combining both the data
+
+cor_plot <- ggscatter(eye_size_estimates, x = 'mean_AD', y = 'mean_eye_size', 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "spearman", cor.coef.size = 5, 
+          cor.coef.args = list (label.x.npc = "left", label.y.npc = "top"),
+          xlab = "Eye size estimates using Ausprey & Stanley 2024", ylab = "Eye size estimates using eBird", 
+          col = 'black', shape = 20, size = 5,
+          label = 'scientific_name' , font.label = c(15, "black"), font.family = "Century Gothic", repel = TRUE) +
+  theme(text = element_text (family = "Century Gothic"),
+        axis.text =  element_text(size = 20, family = "Century Gothic", colour = "black"),
+       axis.title = element_text (size =20, family = "Century Gothic", colour = "black")) 
+
+```
+
+
