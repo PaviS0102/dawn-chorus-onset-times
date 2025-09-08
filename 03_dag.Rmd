@@ -43,19 +43,20 @@ set.seed (123) #to ensure reprodubility with layout
 dag_plot <- dag %>%
   ggdag_collider (node_size = 20, layout = 'nicely') +
   #geom_dag_node (values = c(Collider = "lightblue", Non-Collider = "orange")) +
-  geom_dag_node (aes (color = colliders, fill = )) +
+  geom_dag_node (aes (color = colliders)) +
   scale_colour_manual(values = c("Collider" = "orange", "Non-Collider" = "lightblue")) +
   geom_dag_point (size = 5) +
+  #geom_dag_label_repel(aes(label = name)) +
   geom_dag_edges(
     edge_colour = "black",
     edge_width = 1) +
-  geom_dag_text (family = "A", color = 'black', size = 5, fontface = 1) +
+ geom_dag_text (family = "A", color = 'black', size = 6, fontface = 1) +
  theme(legend.title = element_blank (), 
        axis.text =  element_text(size = 20, family = "A", colour = "black"),
        axis.title = element_text (size =20, family = "A", colour = "black"), 
        legend.text = element_text(size = 20, family = "A", colour = "black")) 
   
-#ggsave(dag_plot, filename = "figs/dag_plot.png", width = 36, height = 18, device = png, units = "in", dpi = 300)- code doesn't save the figure with Century Gothic font
+#ggsave(dag_plot, filename = "figs/dag_plot.png", width = 36, height = 18, device = png, units = "in", dpi = 300) #code doesn't save the figure with Century Gothic font
 #dev.off()
 
 
@@ -70,12 +71,69 @@ adjustmentSets(dag, exposure = "Light", outcome = "onset_times") #Eye Size * Pea
 ```
 
 ## Reading the required data
+
 ```{r}
-data <- read.csv ('results/data.csv') #season, light (time as proxy), 
+annotations <- read.csv ('results/data.csv') #season, light, and peak frequency 
 territoriality <- read.csv ('data/territoriality-&-sociality-data.csv')
-eye_size <- read.csv ('data/Ritland_eyes_raw_FINAL.csv')
+#eye_size <- read.csv ('data/Ritland_eyes_raw_FINAL.csv')
 traits <- read.csv ('data/species-trait-dat.csv') #body mass, trophic niche, foraging height
 vegetation_structure <- read.csv ('data/2020-vegetation-data.csv')
 ```
 
 ## Structuring the data
+
+```{r}
+#data on season and peak frequency
+annotations <- annotations %>%
+  dplyr::select (X, peak_freq, season, site_code, filename, date, begin_clock_time, end_clock_time, species) #retaining only required columns
+
+#data on territoriality
+territoriality <- territoriality %>% 
+  dplyr::select(Species, Territory) #selecting only required columns
+  colnames(territoriality) <- c("scientific_name", "territory")
+
+# Updating the scientific names of following species as per our dataset:
+# Flame-throated bulbul- Rubigula gularis (earlier Pycnonotus gularis)
+# Black eagle- Ictinaetus malaiensis (earlier Ictinaetus malayensis)
+# Brown-capped pygmy woodpecker- Yungipicus nanus (earlier Dendrocopos nanus)
+# Malabar barbet- Psilopogon malabaricus (earlier Megalaima malabarica)
+# Dark-fronted babbler- Dumetia atriceps (earlier Rhopocichla atriceps)
+# Greater flameback- Chrysocolaptes guttacristatus (earlier Chrysocolaptes lucidus)
+# Indian blue robin- Larvivora brunnea (earlier Luscinia brunnea)
+# Indian yellow tit- Machlolophus aplonotus (earlier Parus aplonotus)
+# Jungle babbler- Argya striata (earlier Turdoides striata)
+# Orange-headed thrush- Geokichla citrina (earlier Zoothera citrina)
+# Rufous babbler- Argya subrufa (earlier Turdoides subrufa)
+# Rufous woodpecker- Micropternus brachyurus (earlier Celeus brachyurus)
+# Rusty-tailed flycatcher- Ficedula ruficauda (earlier Muscicapa ruficauda
+# Spot-bellied eagle owl- Ketupa nipalensis (earlier Bubo nipalensis)
+# Spotted dove- Spilopelia chinensis (earlier Stigmatopelia chinensis)
+# Thick-billed warbler- Arundinax aedon (earlier Acrocephalus aedon)
+# White-bellied flycatcher- Cyornis pallidipes (earlier Cyornis pallipes)
+# White-cheeked barbet- Psilopogon viridis (earlier Megalaima viridis)
+# Wayanad laughingthrush- Pterorhinus delesserti (earlier Garrulax delesserti)
+# Yellow-browed bulbul- Iole indica (earlier Acritillas indica)
+
+territoriality <- territoriality %>% 
+   mutate(scientific_name = recode(scientific_name, "Pycnonotus gularis" = "Rubigula gularis", "Ictinaetus malayensis" = "Ictinaetus malaiensis", "Dendrocopos nanus" = "Yungipicus nanus", "Megalaima malabarica" = "Psilopogon malabaricus", "Rhopocichla atriceps" = "Dumetia atriceps", "Chrysocolaptes lucidus" = "Chrysocolaptes guttacristatus", "Luscinia brunnea" = "Larvivora brunnea", "Parus aplonotus" = "Machlolophus aplonotus", "Turdoides striata" = "Argya striata", "Zoothera citrina" = "Geokichla citrina", "Turdoides subrufa" = "Argya subrufa", "Celeus brachyurus" = "Micropternus brachyurus", "Muscicapa ruficauda" = "Ficedula ruficauda", "Bubo nipalensis" = "Ketupa nipalensis", "Stigmatopelia chinensis" = "Spilopelia chinensis", "Acrocephalus aedon" = "Arundinax aedon", "Cyornis pallipes" = "Cyornis pallidipes", "Megalaima viridis" = "Psilopogon viridis", "Garrulax delesserti" = "Pterorhinus delesserti", "Acritillas indica" = "Iole indica")) %>%
+  filter (scientific_name %in% traits$scientific_name) #retaining only required species
+
+#data on body mass, trophic niche, and foraging height
+traits <- traits %>% 
+  dplyr::select (scientific_name, mass, trophic_niche, foraging_habit)
+
+#data on vegetation structure
+vegetation_structure <- vegetation_structure %>%
+  dplyr::select (Site_ID, Site_type, Foliage_score, Canopy_cover) %>%
+  mutate(Site_ID = gsub("_", "", Site_ID)) %>%
+  rename (site_code = Site_ID)
+
+
+
+
+  
+  
+
+
+```
+
