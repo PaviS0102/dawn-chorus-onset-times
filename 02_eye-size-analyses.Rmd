@@ -43,11 +43,15 @@ sp_list_on_A_S <- inner_join (species_traits, species_there, by = 'scientific_na
 
 ```{r}
 eye_size_ebird <- eye_size_ebird %>%
-  rename (scientific_name = species) %>% #renaming for easier analyses
-  dplyr::select (scientific_name, Eye_Size_in_mm_averaged) %>% #retaining only select columns
+  rename (scientific_name = Species) %>% #renaming for easier analyses
+  dplyr::select (scientific_name, Eye_Size_in_mm_averaged, Error_of_bill_ratio) %>% #retaining only select columns
   filter (!(scientific_name == 'Hypsipetes ganeesa')) %>%
   group_by (scientific_name) %>%
+  slice_min (order_by = abs(Error_of_bill_ratio), n = 10) %>% #only selecting those estimates which have the least error ratios of all estimates
   summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% #obtaining the mean eye size measurements for our species
+  left_join (., species_traits, by = 'scientific_name') %>%
+  dplyr::select (scientific_name, mean_eye_size, common_name, mass) %>% 
+  mutate (rel_mean_eye_size = mean_eye_size/mass) %>% #calculating mean eye sizes relative to body mass for each species
   ungroup ()
 ```
 
@@ -59,7 +63,11 @@ eye_size_museum <- eye_size_museum %>%
   dplyr::select (scientific_name, AD) %>% #retaining only select columns
   filter (scientific_name %in% eye_size_ebird$scientific_name) %>% #filtering the required species
   group_by (scientific_name) %>%
-  summarize (mean_AD = mean (AD)) #obtaining the mean axial diameter measurements for our species
+  summarize (mean_AD = mean (AD)) %>% #obtaining the mean axial diameter measurements for our species
+ left_join (., species_traits, by = 'scientific_name') %>%
+  dplyr::select (scientific_name, mean_AD, common_name, mass) %>% 
+  mutate (rel_mean_AD = mean_AD/mass) %>% #calculating mean eye sizes relative to body mass for each species
+  ungroup ()
 ```
 
 ## Correlation between eye size estimates obtained from ebird and Ausprey & Stanley
