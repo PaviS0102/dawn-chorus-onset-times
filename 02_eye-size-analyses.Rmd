@@ -79,11 +79,10 @@ cor_plot <- ggscatter(eye_size_estimates, x = 'rel_mean_AD', y = 'rel_mean_eye_s
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "spearman", cor.coef.size = 6, 
           cor.coef.args = list (label.x.npc = "left", label.y.npc = "top"),
-          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using eBird", 
-          col = 'black', shape = 20, size = 5,
-          label = 'scientific_name' , font.label = c(15, "black"), font.family = "Century Gothic", repel = TRUE) +
-  theme(text = element_text (family = "Century Gothic")),
-  axis.text =  element_text(size = 20, family = "Century Gothic", colour = "black"),
+          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using eBird", col = 'black', shape = 20, size = 5, label = 'scientific_name' , font.label = c(15, 'black'), 
+          font.family = "Century Gothic", repel = TRUE) +
+  theme(text = element_text (family = "Century Gothic"),
+  axis.text =  element_text (size = 20, family = "Century Gothic", colour = "black"),
   axis.title = element_text (size =20, family = "Century Gothic", colour = "black")) 
 
 ```
