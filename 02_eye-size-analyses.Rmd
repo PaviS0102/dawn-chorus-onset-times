@@ -93,7 +93,7 @@ cor_plot <- ggscatter(eye_size_estimates, x = 'rel_mean_AD', y = 'rel_mean_eye_s
           xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = 'black', shape = 20, size = 10, label = 'common_name' , font.label = c(20, 'black'), 
           font.family = "Century Gothic", repel = TRUE) +
   stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='black', size = 15, family = "Century Gothic") +
-  theme(text = element_text (family = "Century Gothic", face = "bold"),
+  theme(text = element_text (family = "Century Gothic"),
   axis.text =  element_text (size = 25, family = "Century Gothic", colour = "black"),
   axis.title = element_text (size =25, family = "Century Gothic", colour = "black"))
 ```
