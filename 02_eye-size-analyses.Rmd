@@ -53,6 +53,8 @@ eye_size_ebird <- eye_size_ebird %>%
   dplyr::select (scientific_name, mean_eye_size, common_name, mass) %>% 
   mutate (rel_mean_eye_size = mean_eye_size/mass) %>% #calculating mean eye sizes relative to body mass for each species
   ungroup ()
+
+write.csv (eye_size_ebird, "results/median_rel_eye_size_ebird.csv")
 ```
 
 ## Filtering the required species and obtaining the optical axial diameter measurements for each species (From Ausprey and Stanley's dataset)
@@ -68,23 +70,75 @@ eye_size_museum <- eye_size_museum %>%
   dplyr::select (scientific_name, mean_AD, common_name, mass) %>% 
   mutate (rel_mean_AD = mean_AD/mass) %>% #calculating mean eye sizes relative to body mass for each species
   ungroup ()
+
+write.csv (eye_size_museum, "results/median_rel_eye_size_museum.csv")
 ```
 
 ## Correlation between eye size estimates obtained from ebird and Ausprey & Stanley
 
 ```{r}
-eye_size_estimates <- left_join (eye_size_ebird, eye_size_museum, by = 'scientific_name') #combining both the data
+eye_size_estimates <- left_join (eye_size_ebird, eye_size_museum, by = c('scientific_name', 'common_name')) #combining both the data
 
 cor_plot <- ggscatter(eye_size_estimates, x = 'rel_mean_AD', y = 'rel_mean_eye_size', 
-          add = "reg.line", conf.int = TRUE, 
-          cor.coef = TRUE, cor.method = "spearman", cor.coef.size = 6, 
-          cor.coef.args = list (label.x.npc = "left", label.y.npc = "top"),
-          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using eBird", col = 'black', shape = 20, size = 5, label = 'scientific_name' , font.label = c(15, 'black'), 
+          add = "reg.line", conf.int = TRUE, color = '#954F72',
+          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = '#5D3147', shape = 20, size = 10, label = 'common_name' , font.label = c(20, '#5D3147'), 
           font.family = "Century Gothic", repel = TRUE) +
-  theme(text = element_text (family = "Century Gothic"),
-  axis.text =  element_text (size = 20, family = "Century Gothic", colour = "black"),
-  axis.title = element_text (size =20, family = "Century Gothic", colour = "black")) 
+  stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='#5D3147', size = 15, family = "Century Gothic") +
+  theme(text = element_text (family = "Century Gothic", face = "bold"),
+  axis.text =  element_text (size = 25, family = "Century Gothic", colour = "#954F72"),
+  axis.title = element_text (size =25, family = "Century Gothic", colour = "#5D3147")) #for the sake of the poster
 
+cor_plot <- ggscatter(eye_size_estimates, x = 'rel_mean_AD', y = 'rel_mean_eye_size', 
+          add = "reg.line", conf.int = TRUE, color = 'black',
+          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = 'black', shape = 20, size = 10, label = 'common_name' , font.label = c(20, 'black'), 
+          font.family = "Century Gothic", repel = TRUE) +
+  stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='black', size = 15, family = "Century Gothic") +
+  theme(text = element_text (family = "Century Gothic", face = "bold"),
+  axis.text =  element_text (size = 25, family = "Century Gothic", colour = "black"),
+  axis.title = element_text (size =25, family = "Century Gothic", colour = "black"))
 ```
+
+## Conducting the linear regression between eye size estimates and measurements macaulay and body mass
+
+```{r}
+lm_ebird <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird) #linear regression between the logs of mean eye sizes and body mass for each species  
+summary (lm_ebird) #to get the results 
+
+predicted <- fitted (lm_ebird) #gives the predicted values 
+residuals <- residuals (lm_ebird) #gives the residuals, i.e. the difference between the predicted and the actual value
+lm_ebird_residuals <- as.data.frame (predicted) #creating a dataframe with the predicted
+lm_ebird_residuals$ebird_residuals <- residuals #and the residual values
+
+
+lm_museum <- lm (log (mean_AD) ~ log (mass), data = eye_size_museum)
+summary (lm_museum)
+
+predicted <- fitted (lm_museum)
+residuals <- residuals (lm_museum)
+lm_museum_residuals <- as.data.frame (predicted)
+lm_museum_residuals$museum_residuals <- residuals
+
+lm_results <- bind_cols (lm_museum_residuals, lm_ebird_residuals, eye_size_ebird) %>%
+  dplyr::select (museum_residuals, ebird_residuals, scientific_name, common_name) #combining the residual values of the eye size estimates from macaulay and measurements from museum and adding the column of species to it
+
+cor_plot <- ggscatter(lm_results, x = 'museum_residuals', y = 'ebird_residuals', 
+          add = "reg.line", conf.int = TRUE, color = '#954F72',
+          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = '#5D3147', shape = 20, size = 10, label = 'common_name' , font.label = c(20, '#5D3147'), 
+          font.family = "Century Gothic", repel = TRUE) +
+  stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='#5D3147', size = 15, family = "Century Gothic") +
+  theme(text = element_text (family = "Century Gothic", face = "bold"),
+  axis.text =  element_text (size = 25, family = "Century Gothic", colour = "#954F72"),
+  axis.title = element_text (size =25, family = "Century Gothic", colour = "#5D3147")) #for the sake of the poster
+
+cor_plot <- ggscatter(lm_results, x = 'museum_residuals', y = 'ebird_residuals', 
+          add = "reg.line", conf.int = TRUE, color = 'black',
+          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = 'black', shape = 20, size = 10, label = 'common_name' , font.label = c(20, 'black'), 
+          font.family = "Century Gothic", repel = TRUE) +
+  stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='black', size = 15, family = "Century Gothic") +
+  theme(text = element_text (family = "Century Gothic"),
+  axis.text =  element_text (size = 25, family = "Century Gothic", colour = "black"),
+  axis.title = element_text (size =25, family = "Century Gothic", colour = "black"))
+```
+
 
 
