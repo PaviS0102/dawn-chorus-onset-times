@@ -80,15 +80,6 @@ write.csv (eye_size_museum, "results/median_rel_eye_size_museum.csv")
 eye_size_estimates <- left_join (eye_size_ebird, eye_size_museum, by = c('scientific_name', 'common_name')) #combining both the data
 
 cor_plot <- ggscatter(eye_size_estimates, x = 'rel_mean_AD', y = 'rel_mean_eye_size', 
-          add = "reg.line", conf.int = TRUE, color = '#954F72',
-          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = '#5D3147', shape = 20, size = 10, label = 'common_name' , font.label = c(20, '#5D3147'), 
-          font.family = "Century Gothic", repel = TRUE) +
-  stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='#5D3147', size = 15, family = "Century Gothic") +
-  theme(text = element_text (family = "Century Gothic", face = "bold"),
-  axis.text =  element_text (size = 25, family = "Century Gothic", colour = "#954F72"),
-  axis.title = element_text (size =25, family = "Century Gothic", colour = "#5D3147")) #for the sake of the poster
-
-cor_plot <- ggscatter(eye_size_estimates, x = 'rel_mean_AD', y = 'rel_mean_eye_size', 
           add = "reg.line", conf.int = TRUE, color = 'black',
           xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = 'black', shape = 20, size = 10, label = 'common_name' , font.label = c(20, 'black'), 
           font.family = "Century Gothic", repel = TRUE) +
