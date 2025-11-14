@@ -1,2 +1,0 @@
-Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	File Offset (s)	Peak Freq (Hz)	Center Freq (Hz)	Delta Freq (Hz)	BW 90% (Hz)	Delta Time (s)	Dur 90% (s)	Min Amp (U)	Max Amp (U)	Peak Amp (U)	Begin Path	Begin Date	Begin Clock Time	End Date	End Clock Time	species	call	song	notes
-1	Spectrogram 1	1	169470.5402	169470.7161	768.7	1323.8	30.5402	1125	1031.25	555.16	468.75	0.1759	0.16	-396	441	441	E:\2020-winter\OLV208U\20210108_063000.WAV	08-01-2021	06:30:31	08-01-2021	06:30:31	WCBA	1		
