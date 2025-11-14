@@ -1,0 +1,277 @@
+---
+title: "03_onset_times"
+output: html_document
+---
+
+# Onset times  
+
+In this script, we will obtain the differences in times at which species vocalizes and plot it.  
+
+## Install required libraries  
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(vegan)
+library(ggplot2)
+library(scico)
+library(data.table)
+library(extrafont)
+library(sf)
+library(raster)
+library(lubridate)
+library(suncalc)
+library(lutz)
+library(stringr)
+library(ggtext)
+library(ggpubr)
+library(hms)
+```
+
+## Loading the data
+
+```{r}
+annotations <- read.csv ('results/data.csv')
+sites <- read.csv("data/list-of-sites.csv")
+species_codes <- read.csv("data/species-annotation-codes.csv")
+median_rel_eye_size_ebird <- read.csv ("results/median_rel_eye_size_ebird.csv")
+```
+
+## Separating out seasons
+```{r}
+summer_annotations <- subset (annotations, annotations$season == 'summer') 
+winter_annotations <- subset (annotations, annotations$season == 'winter')
+```
+
+## Modifying the species codes data for further analyses
+```{r}
+species_codes <- species_codes %>%
+  rename (species = species_annotation_codes) #changing the name of the column so that it can be appended with the dataframe created in the downstream analyses
+```
+
+## Extracting the nautical times for each site and date
+
+```{r}
+#summer
+summer_annotations <- summer_annotations %>%
+  filter (!species == 'UK') %>% #removing all unidentified annotations
+  rename (site_id = site_code) %>% #changing the name of the column as per the site data
+  left_join (., sites, by = 'site_id') %>% #joining the two dataframes
+  dplyr::select(!c(notes, forest_name, Year.Active, No..saplings.planted, No..species.planted, Planted.area..ha., Distance.to.continuous.forest..m., Remnant.area..ha., Notes,)) %>% #removing unwanted columns
+  rename (lat = latitude, lon = longitude) %>% #renaming the columns
+  ungroup ()
+
+summer_annotations$date <- dmy (summer_annotations$date) #reading the dates in dmy format
+
+summer_nautical_dawn <- getSunlightTimes(data = summer_annotations, 
+  keep = c(
+    "sunrise", 
+    "nauticalDawn"), #keeping sunrise and nautical dawn times
+  tz = "Asia/Kolkata"
+) %>% 
+  distinct(.) 
+
+summer_nautical_dawn$nauticalDawn <- as_hms(summer_nautical_dawn$nauticalDawn) #reading the times in hms format
+
+summer_annotations <- summer_annotations %>%
+  left_join (., summer_nautical_dawn, by = c('lat','lon', 'date')) #now, we have a dataframe with species, their onset times, dates, nautical dawn times, and sunset times corresponding to each annotation at each site for summer season.
+
+#winter
+winter_annotations <- winter_annotations %>%
+  filter (!species == 'UK') %>% 
+  rename (site_id = site_code) %>% 
+  left_join (., sites, by = 'site_id') %>% 
+  dplyr::select(!c(notes, forest_name, Year.Active, No..saplings.planted, No..species.planted, Planted.area..ha., Distance.to.continuous.forest..m., Remnant.area..ha., Notes,)) %>% 
+  rename (lat = latitude, lon = longitude) %>% 
+  ungroup ()
+
+winter_annotations$date <- dmy (winter_annotations$date) 
+
+winter_nautical_dawn <- getSunlightTimes(data = winter_annotations, 
+  keep = c(
+    "sunrise", 
+    "nauticalDawn"), 
+  tz = "Asia/Kolkata"
+) %>% 
+  distinct(.) 
+
+winter_nautical_dawn$nauticalDawn <- as_hms(winter_nautical_dawn$nauticalDawn) 
+
+winter_annotations <- winter_annotations %>%
+  left_join (., winter_nautical_dawn, by = c('lat','lon', 'date')) #now, we have a dataframe with species, their onset times, dates, nautical dawn times, and sunset times corresponding to each annotation at each site for winter season.
+```
+
+##Plotting the raw data to visualize the intra-species variation in onset times
+```{r}
+ggplot (summer_annotations, aes (x = species, y = as.POSIXct (begin_clock_time, format = "%H:%M:%S")) +
+  geom_point (shape = 20, size = 4) +
+  #geom_point (aes(x = rel_mean_eye_size)) +
+  #geom_hline(yintercept = summer_median_nautical_dawn, size = 0.3) + 
+  #annotate("text", x = 85, y = as_hms("05:42:26"), label = "Median nautical dawn", 
+           #vjust = -0.5, hjust = 1.3, 
+           #color = "black", size = 5, family ="Century Gothic", angle = 90) +
+  coord_flip () +
+  theme_bw () +
+  #facet_grid (common_name ~ median_begin_time, scales = 'free_x') +
+  scale_y_time(limits = hms::as_hms(c("05:00:00", "11:00:00")),
+  labels = scales::time_format("%H:%M:%S"),
+  breaks = hms::as_hms(c("05:00:00", "06:00:00", "07:00:00", "08:00:00", "09:00:00", "10:00:00", "11:00:00")))+
+  scale_x_discrete (labels = summer_begin_time$common_name) +
+  scale_color_manual (values = c('#000000', '#009E73', '#785EF0','#FE6100','#FFB000'),
+                      labels = c('6 am to 7 am', 'nautical dawn to 6 am', '8 am to 9 am', '7am to 8 am', 'before nautical dawn')) +
+  labs (y = 'Median time of first dawn vocalization', x = 'Species common name') +
+  theme(axis.text.y = element_text (color = summer_begin_time$colour), 
+      axis.text.x = element_text (size = 8), 
+      text = element_text(family = "Century Gothic"),
+      axis.title = element_text(family = "Century Gothic", size = 16, face = 'bold'),
+      axis.text = element_text(family = "Century Gothic", size = 8))
+```
+
+
+
+##Calculating the median relative onset times of species by subtracting nautical dawn times from onset times
+
+```{r}
+#summer
+summer_median_nautical_dawn <- summer_annotations %>%
+   summarize (median_nautical_times = as_hms (median(nauticalDawn))) #calculating the median nautical dawn across all sites
+
+summer_species <- summer_annotations %>%
+  group_by (species) %>%
+  summarize (n= n()) %>%
+  filter (!n<10) %>%
+  pull (species) #this helps us only retain those species for which we have atleast 10 observations, i.e. 84 species.
+
+summer_rel_onset_times <- summer_annotations %>%
+  filter (species %in% summer_species) %>% #filtering the selected species
+  dplyr::select (season, site_id, filename, date, begin_clock_time, species, nauticalDawn, sunrise) %>%
+  mutate (begin_clock_time_hms = as.POSIXct(begin_clock_time, format = "%H:%M:%S")) %>% #converting to a Posixct object to calculate median
+  mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>%
+  mutate(relative_onset_times = as.numeric (begin_clock_time_hms - nauticalDawn), units = 'seconds') %>% #calculating relative onset times as the differences between timing of first vocalization of each species and the nautical dawn at corresponding site
+  group_by (species) %>%
+  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times)) %>% #calculating the median onset times and median relative onset times
+  inner_join (., species_codes, by = 'species') #joining with the species annotation codes dataset
+
+#winter
+winter_median_nautical_dawn <- winter_annotations %>%
+  summarize (median_nautical_times = as_hms (median(nauticalDawn)))
+
+winter_species <- winter_annotations %>%
+  group_by (species) %>%
+  summarize (n= n()) %>%
+  filter (!n<10) %>%
+  pull (species) 
+
+winter_rel_onset_times <- winter_annotations %>%
+  filter (species %in% winter_species) %>% 
+  dplyr::select (season, site_id, filename, date, begin_clock_time, species, nauticalDawn, sunrise) %>%
+  mutate (begin_clock_time_hms = as.POSIXct(begin_clock_time, format = "%H:%M:%S")) %>% 
+  mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>%
+  mutate(relative_onset_times = as.numeric (begin_clock_time_hms - nauticalDawn), units = 'seconds') %>% 
+  group_by (species) %>%
+  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times)) %>% 
+  inner_join (., species_codes, by = 'species') 
+```
+
+## Adding relative median eye sizes of the species
+```{r}
+#summer
+summer_rel_onset_times <- summer_rel_onset_times %>%
+  left_join (., median_rel_eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, rel_mean_eye_size) #only keeping columns which are required for further analyses
+
+#winter
+winter_rel_onset_times <- winter_rel_onset_times %>%
+  left_join (., median_rel_eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, rel_mean_eye_size) 
+```
+
+##Plotting the different onset times of species 
+
+```{r}
+#summer
+summer_median_nautical_dawn <- as.POSIXct('05:42:26', format = "%H:%M:%S") %>%
+  as_hms() #defining the median nautical dawn
+
+summer_begin_time <- summer_rel_onset_times %>%
+  mutate (colour = case_when (median_begin_time < as_hms ('05:42:26') ~ '#FFB000',
+         median_begin_time > as_hms ('05:42:27') & median_begin_time <= as_hms ('06:00:00') ~ '#009E73',
+         median_begin_time > as_hms('06:00:01') & median_begin_time <= as_hms ('07:00:00') ~  '#000000',
+         median_begin_time > as_hms ('07:00:01') & median_begin_time <= as_hms ('08:00:00') ~ '#FE6100',
+         median_begin_time > as_hms ('08:00:01') & median_begin_time <= as_hms ('09:00:00') ~ '#785EF0')) %>%
+  mutate(label_coloured = paste0("<span style = 'colour: ", colour, ";'>", common_name, "</span>")) %>% #so that the label colours are recognised by ggtext
+  arrange (colour) %>% #so that all the species with the same colour are grouped together
+  mutate (season = 'summer') #so that the dataframes can be combined together without confusion
+
+#winter
+winter_median_nautical_dawn <- as.POSIXct('05:42:15', format = "%H:%M:%S") %>%
+  as_hms() 
+
+winter_begin_time <- winter_rel_onset_times %>%
+  mutate (colour = case_when (median_begin_time < as_hms ('05:42:15') ~ '#FFB000',
+         median_begin_time > as_hms ('05:42:15') & median_begin_time <= as_hms ('06:00:00') ~ '#009E73',
+         median_begin_time > as_hms('06:00:01') & median_begin_time <= as_hms ('07:00:00') ~  '#000000',
+         median_begin_time > as_hms ('07:00:01') & median_begin_time <= as_hms ('08:00:00') ~ '#FE6100',
+         median_begin_time > as_hms ('08:00:01') & median_begin_time <= as_hms ('09:00:00') ~ '#785EF0')) %>%
+  mutate(label_coloured = paste0("<span style = 'colour: ", colour, ";'>", common_name, "</span>")) %>% 
+  arrange (colour) %>% 
+  mutate (season = 'winter') 
+
+
+begin_times <- bind_rows (summer_begin_time, winter_begin_time) #combining both dataframes
+
+summer_onset_times_plot <- ggplot (summer_begin_time, aes (x = label_coloured, y = median_begin_time, color = colour)) +
+  geom_point (shape = 20, size = 4)) +
+  #geom_point (aes(x = rel_mean_eye_size)) +
+  geom_hline(yintercept = summer_median_nautical_dawn, size = 0.3) + 
+  annotate("text", x = 85, y = as_hms("05:42:26"), label = "Median nautical dawn", 
+           vjust = -0.5, hjust = 1.3, 
+           color = "black", size = 5, family ="Century Gothic", angle = 90) +
+  coord_flip () +
+  theme_bw () +
+  #facet_grid (common_name ~ median_begin_time, scales = 'free_x') +
+  scale_y_time(limits = hms::as_hms(c("05:00:00", "09:00:00")),
+  labels = scales::time_format("%H:%M:%S"),
+  breaks = hms::as_hms(c("05:00:00", "06:00:00", "07:00:00", "08:00:00", "09:00:00")))+
+  scale_x_discrete (labels = summer_begin_time$common_name) +
+  scale_color_manual (values = c('#000000', '#009E73', '#785EF0','#FE6100','#FFB000'),
+                      labels = c('6 am to 7 am', 'nautical dawn to 6 am', '8 am to 9 am', '7am to 8 am', 'before nautical dawn')) +
+  scale_size_continuous(name = "Relative Eye Size") +
+  labs (y = 'Median time of first dawn vocalization', x = 'Species common name') +
+  theme(axis.text.y = element_text (color = summer_begin_time$colour), 
+      axis.text.x = element_text (size = 8), 
+      text = element_text(family = "Century Gothic"),
+      axis.title = element_text(family = "Century Gothic", size = 16, face = 'bold'),
+      axis.text = element_text(family = "Century Gothic", size = 8))
+
+
+winter_onset_times_plot <- ggplot (winter_begin_time, aes (x = label_coloured, y = median_begin_time, color = colour)) +
+  geom_point (shape = 20, size = 4) +
+  #geom_point (aes(x = rel_mean_eye_size)) +
+  geom_hline(yintercept = winter_median_nautical_dawn, size = 0.3) + 
+  annotate("text", x = 85, y = as_hms("05:42:15"), label = "Median nautical dawn", 
+           vjust = -1.2, hjust = 1.7, 
+           color = "black", size = 5, family ="Century Gothic", angle = 90) +
+  coord_flip () +
+  theme_bw () +
+  #facet_grid (common_name ~ median_begin_time, scales = 'free_x') +
+  scale_y_time(limits = hms::as_hms(c("05:00:00", "09:00:00")),
+  labels = scales::time_format("%H:%M:%S"),
+  breaks = hms::as_hms(c("05:00:00", "06:00:00", "07:00:00", "08:00:00", "08:30:00")))+
+  scale_x_discrete (labels = winter_begin_time$common_name) + 
+  scale_color_manual (values = c('#000000', '#009E73', '#785EF0','#FE6100'),
+                      labels = c('6 am to 7 am', 'nautical dawn to 6 am', '8 am to 9 am', '7am to 8 am')) +
+  labs (y = 'Median time of first dawn vocalization', x = 'Species common name') +
+  theme(axis.text.y = element_text (color = winter_begin_time$colour), 
+      axis.text.x = element_text (size = 8), 
+      text = element_text(family = "Century Gothic"),
+      axis.title = element_text(family = "Century Gothic", size = 16, face = 'bold'),
+      axis.text = element_text(family = "Century Gothic", size = 8))
+```
+
+
+
+
+
+
