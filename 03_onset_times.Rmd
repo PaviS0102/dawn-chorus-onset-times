@@ -150,7 +150,7 @@ summer_rel_onset_times <- summer_annotations %>%
   mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>%
   mutate(relative_onset_times = as.numeric (begin_clock_time_hms - nauticalDawn), units = 'seconds') %>% #calculating relative onset times as the differences between timing of first vocalization of each species and the nautical dawn at corresponding site
   group_by (species) %>%
-  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times)) %>% #calculating the median onset times and median relative onset times
+  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times), q1 = quantile(begin_clock_time_hms, 0.25), q3 = quantile(begin_clock_time_hms, 0.75)) %>% #calculating the median onset times and median relative onset times
   inner_join (., species_codes, by = 'species') #joining with the species annotation codes dataset
 
 #winter
@@ -170,7 +170,7 @@ winter_rel_onset_times <- winter_annotations %>%
   mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>%
   mutate(relative_onset_times = as.numeric (begin_clock_time_hms - nauticalDawn), units = 'seconds') %>% 
   group_by (species) %>%
-  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times)) %>% 
+  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times), q1 = quantile(begin_clock_time_hms, 0.25), q3 = quantile(begin_clock_time_hms, 0.75)) %>% 
   inner_join (., species_codes, by = 'species') 
 ```
 
@@ -221,8 +221,10 @@ winter_begin_time <- winter_rel_onset_times %>%
 
 begin_times <- bind_rows (summer_begin_time, winter_begin_time) #combining both dataframes
 
+
+
 summer_onset_times_plot <- ggplot (summer_begin_time, aes (x = label_coloured, y = median_begin_time, color = colour)) +
-  geom_point (shape = 20, size = 4)) +
+  geom_point (shape = 20, size = 4) +
   #geom_point (aes(x = rel_mean_eye_size)) +
   geom_hline(yintercept = summer_median_nautical_dawn, size = 0.3) + 
   annotate("text", x = 85, y = as_hms("05:42:26"), label = "Median nautical dawn", 
@@ -230,6 +232,7 @@ summer_onset_times_plot <- ggplot (summer_begin_time, aes (x = label_coloured, y
            color = "black", size = 5, family ="Century Gothic", angle = 90) +
   coord_flip () +
   theme_bw () +
+  geom_errorbar(aes(ymin = q1, ymax = q3), width = 0.2) + 
   #facet_grid (common_name ~ median_begin_time, scales = 'free_x') +
   scale_y_time(limits = hms::as_hms(c("05:00:00", "09:00:00")),
   labels = scales::time_format("%H:%M:%S"),
@@ -255,6 +258,7 @@ winter_onset_times_plot <- ggplot (winter_begin_time, aes (x = label_coloured, y
            color = "black", size = 5, family ="Century Gothic", angle = 90) +
   coord_flip () +
   theme_bw () +
+  geom_errorbar(aes(ymin = q1, ymax = q3), width = 0.2) + 
   #facet_grid (common_name ~ median_begin_time, scales = 'free_x') +
   scale_y_time(limits = hms::as_hms(c("05:00:00", "09:00:00")),
   labels = scales::time_format("%H:%M:%S"),
