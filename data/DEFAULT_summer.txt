@@ -1,1 +1,0 @@
-Selection	View	Channel	Begin Time (s)	End Time (s)	Low Freq (Hz)	High Freq (Hz)	File Offset (s)	Peak Freq (Hz)	Center Freq (Hz)	Delta Freq (Hz)	BW 90% (Hz)	Delta Time (s)	Dur 90% (s)	Min Amp (U)	Max Amp (U)	Peak Amp (U)	Begin Path	Begin Date	Begin Clock Time	End Date	End Clock Time	species	call	song	notes
