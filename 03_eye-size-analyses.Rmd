@@ -31,12 +31,16 @@ eye_size_museum <- read.csv ('data/eye-size-museum.csv') #file with museum-deriv
 eye_size_ebird <- read.csv ('data/eye-size-ebird.csv') #file with eBird photo-derived eye size measurements
 ```
 
-## Obtaining a list of species that are present in the eye size dataset- this is only for our reference
+## Obtaining a list of species that are present and absent in the eye size dataset - this is only for our reference
 
 ```{r}
 species_there <- data.frame (scientific_name = intersect (species_traits$scientific_name, eye_size_museum$species_jetz))
-
 sp_list_on_A_S <- inner_join (species_traits, species_there, by = 'scientific_name') 
+write.csv (sp_list_on_A_S, 'results/species_there_A_&_R.csv')
+
+species_not_there <- data.frame (scientific_name = setdiff (species_traits$scientific_name, eye_size_museum$species_jetz))
+sp_list_not_on_A_S <- inner_join (species_traits, species_not_there, by = 'scientific_name') 
+write.csv (sp_list_not_on_A_S, 'results/species_not_there_A_&_R.csv')
 ```
 
 ## Cleaning the eye size data obtained from eBird photos
@@ -49,6 +53,8 @@ eye_size_ebird <- eye_size_ebird %>%
   group_by (scientific_name) %>%
   slice_min (order_by = abs(Error_of_bill_ratio), n = 10) %>% #only selecting those estimates which have the least error ratios of all estimates
   summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% #obtaining the mean eye size measurements for our species
+#shikra name change
+  
   left_join (., species_traits, by = 'scientific_name') %>%
   dplyr::select (scientific_name, mean_eye_size, common_name, mass) %>% 
   mutate (rel_mean_eye_size = mean_eye_size/mass) %>% #calculating mean eye sizes relative to body mass for each species
@@ -111,15 +117,6 @@ lm_museum_residuals$museum_residuals <- residuals
 
 lm_results <- bind_cols (lm_museum_residuals, lm_ebird_residuals, eye_size_ebird) %>%
   dplyr::select (museum_residuals, ebird_residuals, scientific_name, common_name) #combining the residual values of the eye size estimates from macaulay and measurements from museum and adding the column of species to it
-
-cor_plot <- ggscatter(lm_results, x = 'museum_residuals', y = 'ebird_residuals', 
-          add = "reg.line", conf.int = TRUE, color = '#954F72',
-          xlab = "Relative eye size estimates using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = '#5D3147', shape = 20, size = 10, label = 'common_name' , font.label = c(20, '#5D3147'), 
-          font.family = "Century Gothic", repel = TRUE) +
-  stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='#5D3147', size = 15, family = "Century Gothic") +
-  theme(text = element_text (family = "Century Gothic", face = "bold"),
-  axis.text =  element_text (size = 25, family = "Century Gothic", colour = "#954F72"),
-  axis.title = element_text (size =25, family = "Century Gothic", colour = "#5D3147")) #for the sake of the poster
 
 cor_plot <- ggscatter(lm_results, x = 'museum_residuals', y = 'ebird_residuals', 
           add = "reg.line", conf.int = TRUE, color = 'black',
