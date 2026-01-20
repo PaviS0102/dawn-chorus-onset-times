@@ -1,0 +1,315 @@
+---
+title: "03_dag"
+output: html_document
+---
+
+# DAG
+
+In this script, we will create a directed acyclic graph based on assumptions/theories and then test the DAG-data consistency.
+
+## Install required libraries
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(vegan)
+library(dagitty)
+library(ggdag)
+library(visreg)
+library(patchwork)
+library(ggplot2)
+library(extrafont)
+library(showtext)
+library(scico)
+library(data.table)
+library(sf)
+library(raster)
+library(lubridate)
+library(suncalc)
+library(lutz)
+library(ggtext)
+library(ggpubr)
+library(hms)
+```
+
+## Reading the required data
+
+```{r}
+annotations <- read.csv ('results/data.csv') 
+sites <- read.csv("data/list-of-sites.csv")
+summer_rel_onset_times <- read.csv ('results/summer_rel_onset_times.csv')
+territoriality <- read.csv ('data/territoriality-&-sociality-data.csv')
+eye_size <- read.csv ('results/eye_size_residuals.csv')
+traits <- read.csv ('data/species-trait-dat.csv') 
+vegetation_structure <- read.csv ('data/2020-vegetation-data.csv')
+species_codes <- read.csv("data/species-annotation-codes.csv")
+```
+
+#Creating and exploring the DAG:
+
+## Creating an acyclic graph of the conceptual model
+
+```{r}
+windowsFonts(A = windowsFont("Century Gothic")) #font for the plots
+
+dag <- dagify ('onset_times_wrt_time_or_light' ~ 'Territoriality' + 'Peak_Frequency' + 'Eye_Size',
+'Eye_Size' ~ 'Body_Mass' + 'Vegetation_Structure' + 'Trophic_Niche', 
+              'Foraging_Height' ~ 'Vegetation_Structure' + 'Trophic_Niche',
+              'Trophic_Niche' ~ 'Vegetation_Structure',
+              'Peak_Frequency' ~ 'Body_Mass' + 'Vegetation_Structure') #defining the dag
+
+dag_colliders <- node_collider(dag) #displays a column indicating collider and non-collider variables- here is shows eye size, foraging height and peak frequency as collider variables
+
+set.seed (123) #to ensure reprodubility with layout
+
+dag_plot <- dag %>%
+  ggdag_collider (node_size = 20, layout = 'nicely') +
+  geom_dag_node (aes (color = colliders)) +
+  scale_colour_manual(values = c("Collider" = "orange", "Non-Collider" = "lightblue")) +
+  geom_dag_point (size = 5) +
+  geom_dag_edges(
+    edge_colour = "black",
+    edge_width = 1) +
+ geom_dag_text (family = "A", color = 'black', size = 6, fontface = 1) +
+ theme(legend.title = element_blank (), 
+       axis.text =  element_text(size = 20, family = "A", colour = "black"),
+       axis.title = element_text (size =20, family = "A", colour = "black"), 
+       legend.text = element_text(size = 20, family = "A", colour = "black")) 
+```  
+
+##Obtaining the adjustment sets to test each predictor variable with the outcome variable
+
+```{r}
+adjustmentSets(dag, exposure = "Trophic_Niche", outcome = "onset_times_wrt_time_or_light") #vegetation structure
+adjustmentSets(dag, exposure = "Territoriality", outcome = "onset_times_wrt_time_or_light") #none
+adjustmentSets(dag, exposure = "Foraging_Height", outcome = "onset_times_wrt_time_or_light") #Eye Size, Peak frequency + Body mass, Eye size, Vegetation structure + Trophic niche, Vegetation structure
+adjustmentSets(dag, exposure = "Eye_Size", outcome = "onset_times_wrt_time_or_light") #Peak frequency + Body mass, Vegetation structure
+adjustmentSets(dag, exposure = "Vegetation_Structure", outcome = "onset_times_wrt_time_or_light") #none
+adjustmentSets(dag, exposure = "Peak_Frequency", outcome = "onset_times_wrt_time_or_light") #Eye Size + Body mass, Vegetation structure
+adjustmentSets(dag, exposure = "Body_Mass", outcome = "onset_times_wrt_time_or_light") #none
+```
+
+#Obtaining the DAG-data consistency: 
+
+#Outcome variable: Relative onset times
+
+## Cleaning the onset times dataset 
+
+```{r}
+summer_rel_onset_times <- summer_rel_onset_times %>%
+  dplyr::select (species, median_relative_onset_time, scientific_name, common_name) %>%
+  rename ('onset_times_wrt_time_or_light' = median_relative_onset_time) #renaming the column so that it corresponds to the dag 
+```
+
+#Predictor variable 1: Vegetation structure- Canopy cover:
+
+## Cleaning the vegetation structure data
+
+```{r}
+vegetation_structure <- vegetation_structure %>%
+  dplyr::select (Site_ID, Canopy_cover) %>% #selecting only required columns
+  rename (site_id = Site_ID) %>% #renaming the column
+  mutate(across(everything(), ~str_replace_all(., "_", ""))) %>%
+  group_by (site_id) %>%
+  mutate (Canopy_cover = as.numeric (Canopy_cover)) #this gives us a dataframe with multiple values of canopy cover for each site_id
+```
+
+## Cleaning and organizing the onset times data 
+
+```{r}
+summer_annotations <- subset (annotations, annotations$season == 'summer') #separating out the seaons
+
+summer_annotations <- summer_annotations %>%
+  filter (!species == 'UK') %>% #to remove unidentified annotations
+  rename (site_id = site_code) %>% #changing the name of the column
+  left_join (., sites, by = 'site_id') %>% #adding the site information
+  dplyr::select(!c(notes, forest_name, Year.Active, No..saplings.planted, No..species.planted, Planted.area..ha., Distance.to.continuous.forest..m., Remnant.area..ha., Notes,)) %>% #retaining only required columns
+  rename (lat = latitude, lon = longitude) %>% #renaming the lat and long columns
+  ungroup ()
+
+summer_annotations$date <- dmy (summer_annotations$date) #so that the date column is read in dmy format
+
+summer_nautical_dawn <- getSunlightTimes(data = summer_annotations, 
+  keep = c(
+    "sunrise", 
+    "nauticalDawn"), 
+  tz = "Asia/Kolkata"
+) %>% 
+  distinct(.) #to obtain sunrise and nautical dawn times
+
+summer_nautical_dawn$nauticalDawn <- as_hms(summer_nautical_dawn$nauticalDawn) #to read in hms format 
+
+summer_annotations <- summer_annotations %>%
+  left_join (., summer_nautical_dawn, by = c('lat','lon', 'date')) #adding the nautical dawn information to the annotations data
+
+summer_species <- summer_annotations %>%
+  group_by (species) %>%
+  summarize (n= n()) %>%
+  filter (!n<10) %>%
+  pull (species) #retaining species for which we have atleast 10 observations, i.e 84 species
+```
+
+## Adding the vegetation structure data to the onset times data
+
+```{r}
+species_codes <- species_codes %>%
+  rename (species = species_annotation_codes) #to add scientific names and common names to the dataframe
+
+vegetation_structure <- summer_annotations %>%
+  filter (species %in% summer_species) %>% #filtering those species
+  dplyr::select (season, site_id, filename, date, begin_clock_time, species, nauticalDawn, sunrise) %>% #retaining only required columns
+  left_join (., vegetation_structure, by = 'site_id') %>% #adding vegetation structure, i.e. canopy cover data
+  mutate (begin_clock_time_hms = as.POSIXct(begin_clock_time, format = "%H:%M:%S")) %>% 
+  mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>%
+  mutate(relative_onset_times = as.numeric (begin_clock_time_hms - nauticalDawn), units = 'seconds') %>% 
+  group_by (species) %>%
+  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times), Vegetation_Structure = mean (Canopy_cover)) %>% #calculating relative onset times as the differences between timing of first vocalization of each species and the nautical dawn at corresponding site
+  left_join (., species_codes, by = 'species') %>% #adding the columns of scientific name and common name
+  dplyr::select (species, scientific_name, Vegetation_Structure, common_name) #retaining only required columns
+  
+  
+#This gives us a dataframe with species and the mean canopy covers of the sites where they vocalized.
+```
+
+#Predictor variable 2: Peak Frequency:
+
+## Obtaining the median peak frequencies of species
+
+```{r}
+peak_freq <- annotations %>%
+  group_by (species) %>%
+  summarise(median_peak_freq = median(peak_freq)) %>% #obtaining the median peak frequency and
+  mutate (Peak_Frequency = log10(median_peak_freq)) %>% #taking a log of it
+  left_join (summer_rel_onset_times, ., by = 'species' ) %>% #joining it with the onset times, i.e. outcome dataframe
+  dplyr::select (Peak_Frequency, species, scientific_name, common_name) #retaining only required columns
+
+#This gives us a dataframe with species and their log median peak frequencies.
+```
+
+#Predictor variable 3: Trophic niche:
+
+## Obtaining the trophic niche of species
+
+```{r}
+trophic_niche <- traits %>%
+  dplyr::select (scientific_name, common_name, trophic_niche) %>% #selecting only required columns
+  left_join (summer_rel_onset_times, ., by = c('common_name', 'scientific_name')) %>% #joining it with the onset times, i.e. outcome dataframe
+  rename ('Trophic_Niche' = trophic_niche) %>% #renaming the column so that it corresponds to the dag
+  dplyr::select (Trophic_Niche, species, scientific_name, common_name)
+
+#This gives us a dataframe with species and their trophic niches.
+```
+
+#Predictor variable 3: Foraging Height:
+
+## Obtaining the foraging height of species
+
+```{r}
+foraging_height <- traits %>%
+  dplyr::select (scientific_name, common_name, foraging_habit) %>% #selecting only required columns
+  left_join (summer_rel_onset_times, ., by = c('common_name', 'scientific_name')) %>% #joining it with the onset times, i.e. outcome dataframe
+  rename ('Foraging_Height' = foraging_habit) %>% #renaming the column so that it corresponds to the dag
+  dplyr::select (Foraging_Height, species, scientific_name, common_name)
+
+#This gives us a dataframe with species and their foraging heights.
+```
+
+#Predictor variable 4: Territoriality:
+
+## Obtaining territoriality data of species
+
+```{r}
+territoriality <- territoriality %>% 
+   dplyr::select(Species, Territory) %>%
+   rename (scientific_name = Species, Territoriality = Territory) %>% #renaming it for easier downstream analyses
+   mutate(scientific_name = recode(scientific_name, "Pycnonotus gularis" = "Rubigula gularis", "Ictinaetus malayensis" = "Ictinaetus malaiensis", "Dendrocopos nanus" = "Yungipicus nanus", "Megalaima malabarica" = "Psilopogon malabaricus", "Rhopocichla atriceps" = "Dumetia atriceps", "Chrysocolaptes lucidus" = "Chrysocolaptes guttacristatus", "Luscinia brunnea" = "Larvivora brunnea", "Parus aplonotus" = "Machlolophus aplonotus", "Turdoides striata" = "Argya striata", "Zoothera citrina" = "Geokichla citrina", "Turdoides subrufa" = "Argya subrufa", "Celeus brachyurus" = "Micropternus brachyurus", "Muscicapa ruficauda" = "Ficedula ruficauda", "Bubo nipalensis" = "Ketupa nipalensis", "Stigmatopelia chinensis" = "Spilopelia chinensis", "Acrocephalus aedon" = "Arundinax aedon", "Cyornis pallipes" = "Cyornis pallidipes", "Megalaima viridis" = "Psilopogon viridis", "Garrulax delesserti" = "Pterorhinus delesserti", "Acritillas indica" = "Iole indica")) #to update the names of these species as per our dataset
+
+territoriality <-  left_join (summer_rel_onset_times, territoriality, by = 'scientific_name') %>% #joining it with the onset times, i.e. outcome dataframe
+  mutate(Territoriality = case_when(Territoriality %in% "1" ~ "Non-territorial", Territoriality %in% "2" ~ "Weakly territorial", Territoriality %in% "3" ~ "Highly territorial")) %>%
+  dplyr::select (Territoriality, species, scientific_name, common_name)
+
+#This dataframe gives us the species and their territorialities.
+```
+
+#Predictor variable 5: Body mass:
+
+## Obtaining the body mass of species
+
+```{r}
+body_mass <- traits %>%
+  left_join (summer_rel_onset_times, ., by = c("scientific_name", "common_name")) %>%
+  dplyr::select (common_name, scientific_name, mass) %>% #only retaining required columns
+  rename ('Body_Mass' = mass)
+  
+#This dataframe gives us the species and their body masses.
+```
+
+#Predictor variable 6: Eye Size:
+
+## Adding eye size for each species
+
+```{r}
+eye_size <- eye_size %>%
+  left_join (., summer_rel_onset_times, by = c('scientific_name', 'common_name')) %>% #joining it with the onset times, i.e. outcome dataframe
+  dplyr::select (species, common_name, scientific_name, onset_times_wrt_time_or_light, ebird_residuals) %>% #retaining only required columns
+  na.omit () %>% #for now, we consider only 35 species for which we have onset times data and ebird eye size data
+  rename ('Eye_Size' = ebird_residuals) %>%
+  dplyr::select (Eye_Size, species, common_name, scientific_name)
+
+#This dataframe gives the species and the residuals of the linear regression between estimated eye sizes and body mass.
+```
+
+## Combining all the predictor and outcome variables to a single dataframe
+
+```{r}
+#for now, filtering only those 35 species for which we have ebird eye data 
+vegetation_structure <- left_join (vegetation_structure, eye_size, by = c("scientific_name", "common_name", "species")) %>%
+  na.omit () %>%
+ dplyr::select (species, scientific_name, Vegetation_Structure, common_name)
+
+foraging_height <- left_join (foraging_height, eye_size, by = c("scientific_name", "common_name", "species")) %>%
+  na.omit () %>%
+  dplyr::select (Foraging_Height, species, scientific_name, common_name)
+
+trophic_niche <- left_join (trophic_niche, eye_size, by = c("scientific_name", "common_name", "species")) %>%
+  na.omit () %>%
+  dplyr::select (Trophic_Niche, species, scientific_name, common_name)
+
+peak_freq <- left_join (peak_freq, eye_size, by = c("scientific_name", "common_name", "species")) %>%
+  na.omit () %>%
+  dplyr::select (Peak_Frequency, species, scientific_name, common_name) 
+
+territoriality <- left_join (territoriality, eye_size, by = c("scientific_name", "common_name", "species")) %>%
+  na.omit () %>%
+  dplyr::select (Territoriality, species, scientific_name, common_name)
+
+body_mass <- left_join (body_mass, eye_size, by = c("scientific_name", "common_name")) %>%
+  na.omit () %>%
+  dplyr::select (Body_Mass, species, scientific_name, common_name)
+
+summer_rel_onset_times <- left_join (summer_rel_onset_times, eye_size, by = c("scientific_name", "common_name")) %>%
+  na.omit () %>%
+  dplyr::select (scientific_name, common_name, onset_times_wrt_time_or_light)
+
+#combining all dataframes
+dfs <- list (summer_rel_onset_times, territoriality, eye_size, body_mass, peak_freq, foraging_height, trophic_niche, vegetation_structure)
+
+dag_df <- purrr::reduce(dfs, dplyr::left_join, by = c("scientific_name", "common_name")) %>%
+  mutate (Foraging_Height = as.factor (Foraging_Height), Trophic_Niche = as.factor (Trophic_Niche), Territoriality = as.factor (Territoriality)) %>% #reading categorical variables as factors
+  dplyr::select (scientific_name, common_name, onset_times_wrt_time_or_light, Foraging_Height, Trophic_Niche, Territoriality, Body_Mass, Eye_Size, Vegetation_Structure, Peak_Frequency) #retaining required columns
+```
+
+## Evaluating the dependencies and independencies specificed in our dag
+
+```{r}
+test <- localTests(dag, dag_df, type = "cis.chisq") #to account for categorical data
+test$p.value <- p.adjust(test$p.value) #this shows p-values > 0.05, ensuring dag-data consistency
+```
+
+
+
+
+
+
+
