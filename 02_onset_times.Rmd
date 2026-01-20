@@ -27,7 +27,7 @@ library(stringr)
 library(ggtext)
 library(ggpubr)
 library(hms)
-library (lubridate)
+library(lubridate)
 ```
 
 ## Loading the data
@@ -126,6 +126,8 @@ summer_rel_onset_times <- summer_annotations %>%
   summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times), q1 = quantile(begin_clock_time_hms, 0.25), q3 = quantile(begin_clock_time_hms, 0.75)) %>% #calculating the median onset times and median relative onset times
   inner_join (., species_codes, by = 'species') #joining with the species annotation codes dataset
 
+write.csv (summer_rel_onset_times, 'results/summer_rel_onset_times.csv')
+
 #winter
 winter_median_nautical_dawn <- winter_annotations %>%
   summarize (median_nautical_times = as_hms (median(nauticalDawn)))
@@ -199,7 +201,7 @@ begin_times <- bind_rows (summer_begin_time, winter_begin_time) #combining both 
 summer_begin_time$species_index <- as.numeric(fct_reorder(summer_begin_time$label_coloured,
                                                           summer_begin_time$median_begin_time))
 
-summer_begin_time$eye_x <- summer_begin_time$species_index -10
+#summer_begin_time$eye_x <- summer_begin_time$species_index -10
 
 summer_onset_times_plot <- ggplot (summer_begin_time, aes (x = fct_reorder (label_coloured, median_begin_time), y = median_begin_time, color = colour)) +
   geom_point (shape = 20, size = 4) +
