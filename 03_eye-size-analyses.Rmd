@@ -104,7 +104,8 @@ lm_museum_residuals$museum_residuals <- residuals
 lm_results <- bind_cols (lm_museum_residuals, lm_ebird_residuals, eye_size_ebird) %>%
   dplyr::select (museum_residuals, ebird_residuals, scientific_name, common_name) #combining the residual values of the eye size estimates from macaulay and measurements from museum and adding the column of species to it
 
-lm_results <- left_join (species_there, lm_results, by ='scientific_name') #only filtering those species for which we are analyzing onset times
+lm_results <- left_join (species_there, lm_results, by ='scientific_name') %>% #only filtering those species for which we are analyzing onset times
+  na.omit ()
 
 write.csv (lm_results, 'results/eye_size_residuals.csv')
 ```

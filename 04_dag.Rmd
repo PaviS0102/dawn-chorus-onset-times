@@ -76,6 +76,33 @@ dag_plot <- dag %>%
        axis.text =  element_text(size = 20, family = "A", colour = "black"),
        axis.title = element_text (size =20, family = "A", colour = "black"), 
        legend.text = element_text(size = 20, family = "A", colour = "black")) 
+
+
+myDag <- dagitty ('dag {
+bb="-4.34,-3.62,3.623,6.047"
+Body_Mass [pos="-3.490,0.154"]
+Eye_Size [pos="-0.136,0.101"]
+Foraging_Height [pos="2.192,-0.930"]
+Peak_Frequency [pos="-3.676,-2.650"]
+Territoriality [pos="2.959,5.241"]
+Trophic_Niche [pos="1.720,-2.814"]
+Vegetation_Structure [pos="-0.609,-2.549"]
+onset_times_wrt_time_or_light [outcome,pos="1.036,3.214"]
+Body_Mass -> Eye_Size
+Body_Mass -> Peak_Frequency
+Eye_Size -> onset_times_wrt_time_or_light
+Foraging_Height -> Eye_Size
+Territoriality -> onset_times_wrt_time_or_light
+Trophic_Niche -> Eye_Size
+Trophic_Niche -> Foraging_Height
+Vegetation_Structure -> Eye_Size
+Vegetation_Structure -> Foraging_Height
+Vegetation_Structure -> Peak_Frequency
+Vegetation_Structure -> Trophic_Niche
+}
+')
+
+plot (myDag)
 ```  
 
 ##Obtaining the adjustment sets to test each predictor variable with the outcome variable
@@ -305,6 +332,8 @@ dag_df <- purrr::reduce(dfs, dplyr::left_join, by = c("scientific_name", "common
 ```{r}
 test <- localTests(dag, dag_df, type = "cis.chisq") #to account for categorical data
 test$p.value <- p.adjust(test$p.value) #this shows p-values > 0.05, ensuring dag-data consistency
+
+plotLocalTestResults(test)
 ```
 
 

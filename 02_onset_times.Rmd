@@ -36,7 +36,7 @@ library(lubridate)
 annotations <- read.csv ('results/data.csv')
 sites <- read.csv("data/list-of-sites.csv")
 species_codes <- read.csv("data/species-annotation-codes.csv")
-mean_rel_eye_size_ebird <- read.csv ("results/mean_rel_eye_size_ebird.csv")
+eye_size_ebird <- read.csv ("results/eye_size_residuals.csv")
 ```
 
 ## Separating out seasons
@@ -153,13 +153,13 @@ winter_rel_onset_times <- winter_annotations %>%
 ```{r}
 #summer
 summer_rel_onset_times <- summer_rel_onset_times %>%
-  left_join (., mean_rel_eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
-  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, rel_mean_eye_size, q1, q3) #only keeping columns which are required for further analyses
+  left_join (., eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, ebird_residuals, q1, q3) #only keeping columns which are required for further analyses
 
 #winter
 winter_rel_onset_times <- winter_rel_onset_times %>%
-  left_join (., mean_rel_eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
-  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, rel_mean_eye_size, q1, q3) 
+  left_join (., eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, ebird_residuals, q1, q3) 
 ```
 
 ##Plotting the different onset times of species 
