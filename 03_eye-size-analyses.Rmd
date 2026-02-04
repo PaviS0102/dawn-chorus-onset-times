@@ -28,7 +28,7 @@ library(ggpubr)
 ```{r}
 species_traits <- read.csv ('data/species-trait-dat.csv') #to obtain the list of required species
 eye_size_museum <- read.csv ('data/eye-size-museum.csv') #file with museum-derived eye size measurements
-eye_size_ebird <- read.csv ('data/eye-size-ebird.csv') #file with eBird photo-derived eye size measurements
+eye_size_ebird <- read.csv ('data/eye-size-ebird_A&R.csv') #file with eBird photo-derived eye size measurements
 ```
 
 ## Firstly, obtaining a list of species that are present and absent in the eye size dataset- this is only for our reference. Secondly, obtaining a list of i) species for which we are analyzing onset times and have eye size data (museum), and ii) species for which we are analyzing onset times and do not have eye size data (museum)
