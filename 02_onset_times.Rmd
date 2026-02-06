@@ -153,6 +153,7 @@ write.csv (winter_rel_onset_times, 'results/winter_rel_onset_times.csv')
 ```
 
 ## Adding relative mean eye sizes of the species
+
 ```{r}
 #summer
 summer_rel_onset_times <- summer_rel_onset_times %>%
@@ -289,30 +290,34 @@ dev.off()
 ##Next, we plot onset times of species with their eye sizes
 
 ```{r}
-ggplot(summer_begin_time, aes(x = median_relative_onset_time, y = rel_mean_eye_size)) +
+eye_size_begin_times_plot <- ggplot(summer_begin_time, aes(x = median_relative_onset_time, y = rel_mean_eye_size)) +
   geom_point(color = 'black', size = 5, shape = 20) +
   geom_text_repel (aes(label = common_name), check_overlap = TRUE, family = "Century Gothic") +
    stat_cor (method = 'spearman', label.x.npc = "center", label.y.npc = "top", color ='black', size = 10, family = "Century Gothic") +
   geom_smooth(method = "lm", se = TRUE, color = 'black') +
   theme_bw () +
-  labs(y = 'Mean eye size relative to body mass', x = 'Median relative onset times') +
+  labs(y = 'Mean eye size relative to body mass', x = 'Median onset times (sec) relative to nautical dawn') +
   theme(axis.text.y = element_markdown(family = "Century Gothic", size = 10),
     axis.text.x = element_text(family = "Century Gothic", size = 10), 
     text = element_text(family = "Century Gothic"))
 
-x <- ggplot(summer_begin_time, aes(x = 1, y = common_name_ordered)) +
-  geom_point(aes(size = mean_eye_size, color = colour)) +
+eye_size_plot <- ggplot(summer_begin_time, aes(x = 1, y = common_name_ordered)) +
+  geom_point(aes(size = rel_mean_eye_size, color= colour, alpha = 0.9)) +
   scale_color_identity() +
   scale_x_continuous(breaks = 1, label = 'mm') +
   theme_bw () +
- labs(y = '', x = 'Mean eye size') +
+ labs(y = '', x = 'Eye size') +
   theme(axis.text.y = element_blank(), 
     axis.ticks.y = element_blank(),
     axis.text.x = element_text(family = "Century Gothic", size = 8), 
     text = element_text(family = "Century Gothic"),  
-    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold')) 
+    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold'),
+    legend.position = 'none') #to remove legend
 
-grid.arrange(summer_onset_times_plot, x, ncol = 2, nrow = 1)
+summer_onset_times_plot <- summer_onset_times_plot +
+  theme (axis.title.y = element_blank ()) #removing the y-axis title so that the plots are easier to read
+
+eye_size_plot + summer_onset_times_plot +  plot_layout(nrow = 1, widths = c(0.2, 1))
 ```
 
 
