@@ -143,12 +143,15 @@ dev.off()
 ## Cleaning the eye size data (data for species with no comparable data)
 
 ```{r}
+species_traits <- species_traits %>%
+  mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) #updating the scientific name of yellow-browed bulbul
+
 eye_size_ebird_not_in_AR <- eye_size_ebird_not_in_AR %>%
+  na.omit () %>%
   rename (scientific_name = species) %>% 
   dplyr::select (scientific_name, Eye_Size_in_mm_averaged, Error_of_bill_ratio) %>% 
- group_by (scientific_name) %>%
-  
-  mutate (Error_of_bill_ratio = as.numeric (Error_of_bill_ratio)) %>% #converting into numeric class
+  group_by (scientific_name) %>%
+  mutate (Error_of_bill_ratio = as.numeric (Error_of_bill_ratio), Eye_Size_in_mm_averaged = as.numeric (Eye_Size_in_mm_averaged)) %>% #converting into numeric class
   slice_min (order_by = abs(Error_of_bill_ratio), n = 10) %>% 
   summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% 
   left_join (., species_traits, by = 'scientific_name') %>%
@@ -157,4 +160,11 @@ eye_size_ebird_not_in_AR <- eye_size_ebird_not_in_AR %>%
   ungroup ()
 ```
 
+## Combining both the eye size dataframes
+
+```{r}
+eye_size_ebird <- bind_rows (eye_size_ebird_AR, eye_size_ebird_not_in_AR)
+
+write.csv (eye_size_ebird, 'results/eye_size_ebird.csv')
+```
 
