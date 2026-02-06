@@ -5,8 +5,9 @@ editor_options:
 
 # Eye size analyses 
 
-In this script, we will compare the eye size estimates obtained using eBird photos with Ausprey & Stanley 2024's eye morphology dataset from preserved museum specimens.
+In the first section of the script, we will compare the eye size estimates obtained using eBird photos with Ausprey & Ritland 2024's eye morphology dataset from preserved museum specimens. This is followed by the second section of the script where we will focus on obtaining mean eye size estimates from citizen-science photographs for all species in our study.
 
+#Section I
 ## Install required libraries  
 
 ```{r}
@@ -28,10 +29,12 @@ library(ggpubr)
 ```{r}
 species_traits <- read.csv ('data/species-trait-dat.csv') #to obtain the list of required species
 eye_size_museum <- read.csv ('data/eye-size-museum.csv') #file with museum-derived eye size measurements
-eye_size_ebird <- read.csv ('data/eye-size-ebird_A&R.csv') #file with eBird photo-derived eye size measurements
+eye_size_ebird_AR <- read.csv ('data/eye-size-ebird-A&R.csv') #file with Macaulay photo-derived eye size estimated, for species for which we have comparable measurements from museum specimens
+eye_size_ebird_not_in_AR <- read.csv ('data/eye-size-ebird-not-in-A&R.csv') #file with Macaulay photo-derived eye size estimates, for species for which we don't have comparable measurements from museum specimens
 ```
 
 ## Firstly, obtaining a list of species that are present and absent in the eye size dataset- this is only for our reference. Secondly, obtaining a list of i) species for which we are analyzing onset times and have eye size data (museum), and ii) species for which we are analyzing onset times and do not have eye size data (museum)
+
 ```{r}
 #1
 species_there <- data.frame (scientific_name = intersect (species_traits$scientific_name, eye_size_museum$species_jetz))
@@ -53,11 +56,10 @@ write.csv (species_not_there, 'results/species_in_acoustics_data_not_in_ausprey_
 ## Cleaning the eye size data obtained from eBird photos
 
 ```{r}
-eye_size_ebird <- eye_size_ebird %>%
+eye_size_ebird_AR <- eye_size_ebird_AR %>%
   rename (scientific_name = Species) %>% #renaming for easier analyses
   dplyr::select (scientific_name, Eye_Size_in_mm_averaged, Error_of_bill_ratio) %>% #retaining only select columns
-  filter (!(scientific_name == 'Hypsipetes ganeesa')) %>%
-  group_by (scientific_name) %>%
+ group_by (scientific_name) %>%
   slice_min (order_by = abs(Error_of_bill_ratio), n = 10) %>% #only selecting those estimates which have the least error ratios of all estimates
   summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% #obtaining the mean eye size measurements for our species
   left_join (., species_traits, by = 'scientific_name') %>%
@@ -66,13 +68,13 @@ eye_size_ebird <- eye_size_ebird %>%
   ungroup ()
 ```
 
-## Filtering the required species and obtaining the optical axial diameter measurements for each species (From Ausprey and Stanley's dataset)
+## Filtering the required species and obtaining the optical axial diameter measurements for each species (From Ausprey and Ritlands's dataset)
 
 ```{r}
 eye_size_museum <- eye_size_museum %>%
   rename (scientific_name = species_jetz) %>% #renaming for easier analyses
   dplyr::select (scientific_name, AD) %>% #retaining only select columns
-  filter (scientific_name %in% eye_size_ebird$scientific_name) %>% #filtering the required species
+  filter (scientific_name %in% eye_size_ebird_AR$scientific_name) %>% #filtering the required species
   group_by (scientific_name) %>%
   summarize (mean_AD = mean (AD)) %>% #obtaining the mean axial diameter measurements for our species
  left_join (., species_traits, by = 'scientific_name') %>%
@@ -84,7 +86,7 @@ eye_size_museum <- eye_size_museum %>%
 ## Conducting the linear regression between eye size estimates/measurements and body mass 
 
 ```{r}
-lm_ebird <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird) #linear regression between the logs of mean eye sizes and body mass for each species  
+lm_ebird <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird_AR) #linear regression between the logs of mean eye sizes and body mass for each species  
 summary (lm_ebird) #to get the results 
 
 predicted <- fitted (lm_ebird) #gives the predicted values 
@@ -101,7 +103,7 @@ residuals <- residuals (lm_museum)
 lm_museum_residuals <- as.data.frame (predicted)
 lm_museum_residuals$museum_residuals <- residuals
 
-lm_results <- bind_cols (lm_museum_residuals, lm_ebird_residuals, eye_size_ebird) %>%
+lm_results <- bind_cols (lm_museum_residuals, lm_ebird_residuals, eye_size_ebird_AR) %>%
   dplyr::select (museum_residuals, ebird_residuals, scientific_name, common_name) #combining the residual values of the eye size estimates from macaulay and measurements from museum and adding the column of species to it
 
 lm_results <- left_join (species_there, lm_results, by ='scientific_name') %>% #only filtering those species for which we are analyzing onset times
@@ -121,7 +123,38 @@ cor_plot <- ggscatter(lm_results, x = 'museum_residuals', y = 'ebird_residuals',
   theme(text = element_text (family = "Century Gothic"),
   axis.text =  element_text (size = 25, family = "Century Gothic", colour = "black"),
   axis.title = element_text (size =25, family = "Century Gothic", colour = "black"))
+
+cor_plot #to inspect the visualization
+
+#to save the plot
+ggsave(cor_plot,
+  filename = "figs/cor_plot.png",  
+  width    = 15,
+  height   = 12,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
 ```
 
+#This plot shows a highly significant positive correlation (R = 0.79, p < 0.05) between the residuals of eye size estimates from citizen-science-derived photographs and measurements from museum specimens. Thus, we extend the methodology of estimating eye size estimates from photographs to species for which we do not have comparable museum-based data.
+
+#Section II
+## Cleaning the eye size data (data for species with no comparable data)
+
+```{r}
+eye_size_ebird_not_in_AR <- eye_size_ebird_not_in_AR %>%
+  rename (scientific_name = species) %>% 
+  dplyr::select (scientific_name, Eye_Size_in_mm_averaged, Error_of_bill_ratio) %>% 
+ group_by (scientific_name) %>%
+  
+  mutate (Error_of_bill_ratio = as.numeric (Error_of_bill_ratio)) %>% #converting into numeric class
+  slice_min (order_by = abs(Error_of_bill_ratio), n = 10) %>% 
+  summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% 
+  left_join (., species_traits, by = 'scientific_name') %>%
+  dplyr::select (scientific_name, mean_eye_size, common_name, mass) %>% 
+  mutate (rel_mean_eye_size = mean_eye_size/mass) %>% 
+  ungroup ()
+```
 
 
