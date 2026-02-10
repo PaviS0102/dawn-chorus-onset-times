@@ -148,6 +148,7 @@ species_traits <- species_traits %>%
 
 eye_size_ebird_not_in_AR <- eye_size_ebird_not_in_AR %>%
   na.omit () %>%
+  filter (!common_name %in% c("Red-wattled Lapwing", "Spotted Dove", "Malabar Parakeet", "Vernal Hanging-Parrot", "Plum-headed Parakeet", "Malabar Gray Hornbill")) %>% #removing species for which either the error rates are too high, or eye sizes are not possible to obtain using photographs
   rename (scientific_name = species) %>% 
   dplyr::select (scientific_name, Eye_Size_in_mm_averaged, Error_of_bill_ratio) %>% 
   group_by (scientific_name) %>%
