@@ -86,6 +86,7 @@ eye_size_museum <- eye_size_museum %>%
 ## Conducting the linear regression between eye size estimates/measurements and body mass 
 
 ```{r}
+#ebird-estimates:
 lm_ebird <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird_AR) #linear regression between the logs of mean eye sizes and body mass for each species  
 summary (lm_ebird) #to get the results 
 
@@ -94,7 +95,7 @@ residuals <- residuals (lm_ebird) #gives the residuals, i.e. the difference betw
 lm_ebird_residuals <- as.data.frame (predicted) #creating a dataframe with the predicted
 lm_ebird_residuals$ebird_residuals <- residuals #and the residual values
 
-
+#museum-measurements:
 lm_museum <- lm (log (mean_AD) ~ log (mass), data = eye_size_museum)
 summary (lm_museum)
 
@@ -108,8 +109,6 @@ lm_results <- bind_cols (lm_museum_residuals, lm_ebird_residuals, eye_size_ebird
 
 lm_results <- left_join (species_there, lm_results, by ='scientific_name') %>% #only filtering those species for which we are analyzing onset times
   na.omit ()
-
-write.csv (lm_results, 'results/eye_size_residuals.csv')
 ```
 
 ## Conducting a correlation between the residual values from the linear regressions between estimates or measurements and body mass
@@ -137,7 +136,7 @@ ggsave(cor_plot,
 dev.off()
 ```
 
-#This plot shows a highly significant positive correlation (R = 0.79, p < 0.05) between the residuals of eye size estimates from citizen-science-derived photographs and measurements from museum specimens. Thus, we extend the methodology of estimating eye size estimates from photographs to species for which we do not have comparable museum-based data.
+#This plot shows a highly significant positive correlation (R = 0.99, p < 0.05) between the residuals of eye size estimates from citizen-science-derived photographs and measurements from museum specimens. Thus, we extend the methodology of estimating eye size estimates from photographs to species for which we do not have comparable museum-based data.
 
 #Section II
 ## Cleaning the eye size data (data for species with no comparable data)
@@ -167,5 +166,22 @@ eye_size_ebird_not_in_AR <- eye_size_ebird_not_in_AR %>%
 eye_size_ebird <- bind_rows (eye_size_ebird_AR, eye_size_ebird_not_in_AR)
 
 write.csv (eye_size_ebird, 'results/eye_size_ebird.csv')
+```
+
+## Then, we obtain the residual eye size estimates of all species
+
+```{r}
+lm <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird) 
+summary (lm) 
+
+predicted <- fitted (lm) 
+residuals <- residuals (lm) 
+lm_residuals <- as.data.frame (predicted) 
+lm_residuals$ebird_residuals <- residuals 
+
+lm_results <- bind_cols (lm_residuals, eye_size_ebird) %>%
+  dplyr::select (ebird_residuals, scientific_name, common_name) 
+
+write.csv (lm_results, 'results/eye_size_residuals.csv')
 ```
 
