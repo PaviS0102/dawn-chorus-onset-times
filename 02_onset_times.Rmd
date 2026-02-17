@@ -37,16 +37,19 @@ library(ggrepel)
 annotations <- read.csv ('results/data.csv')
 sites <- read.csv("data/list-of-sites.csv")
 species_codes <- read.csv("data/species-annotation-codes.csv")
-eye_size_ebird <- read.csv ("results/eye_size_ebird.csv")
+eye_size_residuals <- read.csv ("results/eye_size_residuals.csv")
+traits <- read.csv ('data/species-trait-dat.csv') 
 ```
 
 ## Separating out seasons
+
 ```{r}
 summer_annotations <- subset(annotations, annotations$season == 'summer') 
 winter_annotations <- subset(annotations, annotations$season == 'winter')
 ```
 
 ## Modifying the species codes data for further analyses
+
 ```{r}
 species_codes <- species_codes %>%
   rename (species = species_annotation_codes) #changing the name of the column so that it can be appended with the dataframe created in the downstream analyses
@@ -137,15 +140,14 @@ winter_species <- winter_annotations %>%
   group_by (species) %>%
   summarize (n= n()) %>%
   filter (!n<10) %>%
-  pull (species) 
+  pull (species) #gives 74 species 
 
 winter_rel_onset_times <- winter_annotations %>%
   filter (species %in% winter_species) %>% 
   dplyr::select (season, site_id, filename, date, begin_clock_time, species, nauticalDawn, sunrise) %>%
   mutate (begin_clock_time_hms = as.POSIXct(begin_clock_time, format = "%H:%M:%S")) %>% 
   mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>%
-  mutate(relative_onset_times = as.numeric (begin_clock_time_hms - nauticalDawn), units = 'seconds') %>% 
-  group_by (species) %>%
+  mutate(relative_onset_times = as.numeric (begin_clock_time_hms - nauticalDawn), units = 'seconds') %>%  group_by (species) %>%
   summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times), q1 = quantile(begin_clock_time_hms, 0.25), q3 = quantile(begin_clock_time_hms, 0.75)) %>% 
   inner_join (., species_codes, by = 'species')
 
@@ -158,17 +160,37 @@ write.csv (winter_rel_onset_times, 'results/winter_rel_onset_times.csv')
 #summer
 summer_rel_onset_times <- summer_rel_onset_times %>%
   mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) %>% #updating the scientific name of yellow-browed bulbul
-  left_join (., eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
+  left_join (., eye_size_residuals, by = c('scientific_name', 'common_name')) %>%
   na.omit () %>% #removing those species for which we couldn't obtain eye size data
-  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, rel_mean_eye_size, q1, q3, mean_eye_size) #only keeping columns which are required for further analyses
+  filter (!common_name %in% c("Red-wattled Lapwing", "Spotted Dove", "Malabar Parakeet", "Vernal Hanging-Parrot", "Plum-headed Parakeet", "Malabar Gray Hornbill")) %>%
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, ebird_residuals, q1, q3) #only keeping columns which are required for further analyses
 
 #winter
 winter_rel_onset_times <- winter_rel_onset_times %>%
   mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) %>%
-  left_join (., eye_size_ebird, by = c('scientific_name', 'common_name')) %>%
+  left_join (., eye_size_residuals, by = c('scientific_name', 'common_name')) %>%
   na.omit () %>%
-  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, rel_mean_eye_size, q1, q3, mean_eye_size) 
+  filter (!common_name %in% c("Red-wattled Lapwing", "Spotted Dove", "Malabar Parakeet", "Vernal Hanging-Parrot", "Plum-headed Parakeet", "Malabar Gray Hornbill")) %>%
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, eBird_codes, q1, q3, ebird_residuals) 
 ```
+
+## Adding foraging heights and tropic niches of species
+
+```{r}
+#summer
+summer_rel_onset_times <- traits %>%
+  mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) %>% #updating the scientific name of yellow-browed bulbul
+  dplyr::select (scientific_name, common_name, trophic_niche, foraging_habit) %>% #selecting only required columns
+  left_join (summer_rel_onset_times, ., by = c('common_name', 'scientific_name')) #joining it with the onset times, i.e. outcome dataframe
+
+#winter
+winter_rel_onset_times <- traits %>%
+  mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) %>%
+  dplyr::select (scientific_name, common_name, trophic_niche, foraging_habit) %>% 
+  left_join (winter_rel_onset_times, ., by = c('common_name', 'scientific_name')) %>% 
+ mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) 
+```
+
 
 ##Plotting the different onset times of species 
 
@@ -186,6 +208,15 @@ summer_begin_time <- summer_rel_onset_times %>%
     arrange(median_begin_time) %>%
   mutate(common_name_styled = paste0("<span style='color:", colour, "'>", common_name, "</span>"), #creating the HTML-styled labels for coloring
     common_name_ordered = fct_reorder(common_name, median_begin_time)) #create an ordering factor
+
+  #mutate (fh_icon = case_when (trophic_niche == 'Invertivore' ~ ">&#e4d0;</span>",
+      #trophic_niche == 'Vertivore' ~ ">&#f4ba;</span>",
+      #trophic_niche == 'Nectarivore' ~ ">&#e139;</span>",
+      #trophic_niche == 'Granivore' ~ ">&#e2cd;</span>",
+      #trophic_niche == 'Aquatic Predator' ~ ">&#f578;</span>",
+      #trophic_niche == 'Frugivore' ~ ">&#f5d1;</span>"))
+  
+
   
 # visualization:
 summer_onset_times_plot <- ggplot(summer_begin_time, 
@@ -290,23 +321,38 @@ dev.off()
 ##Next, we plot onset times of species with their eye sizes
 
 ```{r}
-eye_size_begin_times_plot <- ggplot(summer_begin_time, aes(x = median_relative_onset_time, y = rel_mean_eye_size)) +
+# First, we plot cor plot between eye size residuals and onset times of different species
+#summer
+summer_eye_size_begin_times_cor_plot <- ggplot(summer_begin_time, aes(x = median_relative_onset_time, y = ebird_residuals)) +
   geom_point(color = 'black', size = 5, shape = 20) +
   geom_text_repel (aes(label = common_name), check_overlap = TRUE, family = "Century Gothic") +
    stat_cor (method = 'spearman', label.x.npc = "center", label.y.npc = "top", color ='black', size = 10, family = "Century Gothic") +
   geom_smooth(method = "lm", se = TRUE, color = 'black') +
   theme_bw () +
-  labs(y = 'Mean eye size relative to body mass', x = 'Median onset times (sec) relative to nautical dawn') +
+  labs(y = 'Eye size residuals', x = 'Median onset times (sec) relative to nautical dawn') +
   theme(axis.text.y = element_markdown(family = "Century Gothic", size = 10),
     axis.text.x = element_text(family = "Century Gothic", size = 10), 
     text = element_text(family = "Century Gothic"))
 
-eye_size_plot <- ggplot(summer_begin_time, aes(x = 1, y = common_name_ordered)) +
-  geom_point(aes(size = rel_mean_eye_size, color= colour, alpha = 0.9)) +
+# inspect the visualization
+summer_eye_size_begin_times_cor_plot
+
+# save the plot
+ggsave (summer_eye_size_begin_times_cor_plot,
+  filename = "figs/summer_eye_size_begin_times_cor_plot.png",  width  = 10,
+  height   = 8,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+
+# Second, we plot eye size residuals alongside median begin times of species
+summer_eye_size_plot <- ggplot(summer_begin_time, aes(x = 1, y = common_name_ordered)) +
+  geom_point(aes(size = ebird_residuals, color= colour, alpha = 0.9)) +
   scale_color_identity() +
   scale_x_continuous(breaks = 1, label = 'mm') +
   theme_bw () +
- labs(y = '', x = 'Eye size') +
+ labs(y = '', x = 'Eye size residuals') +
   theme(axis.text.y = element_blank(), 
     axis.ticks.y = element_blank(),
     axis.text.x = element_text(family = "Century Gothic", size = 8), 
@@ -317,9 +363,134 @@ eye_size_plot <- ggplot(summer_begin_time, aes(x = 1, y = common_name_ordered)) 
 summer_onset_times_plot <- summer_onset_times_plot +
   theme (axis.title.y = element_blank ()) #removing the y-axis title so that the plots are easier to read
 
-eye_size_plot + summer_onset_times_plot +  plot_layout(nrow = 1, widths = c(0.2, 1))
+summer_eye_size_begin_times_plot <- summer_eye_size_plot + summer_onset_times_plot +  plot_layout(nrow = 1, widths = c(0.2, 1))
+
+# inspect the visualization
+summer_eye_size_begin_times_plot
+
+# save the plot
+ggsave (summer_eye_size_begin_times_plot,
+  filename = "figs/summer_eye_size_begin_times_plot.png",  width  = 10,
+  height   = 12,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+
+#winter
+#1
+winter_eye_size_begin_times_cor_plot <- ggplot(winter_begin_time, aes(x = median_relative_onset_time, y = ebird_residuals)) +
+  geom_point(color = 'black', size = 5, shape = 20) +
+  geom_text_repel (aes(label = common_name), check_overlap = TRUE, family = "Century Gothic") +
+   stat_cor (method = 'spearman', label.x.npc = "center", label.y.npc = "top", color ='black', size = 10, family = "Century Gothic") +
+  geom_smooth(method = "lm", se = TRUE, color = 'black') +
+  theme_bw () +
+  labs(y = 'Eye size residuals', x = 'Median onset times (sec) relative to nautical dawn') +
+  theme(axis.text.y = element_markdown(family = "Century Gothic", size = 10),
+    axis.text.x = element_text(family = "Century Gothic", size = 10), 
+    text = element_text(family = "Century Gothic"))
+
+# inspect the visualization
+winter_eye_size_begin_times_cor_plot
+
+# save the plot
+ggsave (winter_eye_size_begin_times_cor_plot,
+  filename = "figs/winter_eye_size_begin_times_cor_plot.png",  width  = 10,
+  height   = 8,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+
+#2
+winter_eye_size_plot <- ggplot(winter_begin_time, aes(x = 1, y = common_name_ordered)) +
+  geom_point(aes(size = ebird_residuals, color= colour, alpha = 0.9)) +
+  scale_color_identity() +
+  scale_x_continuous(breaks = 1, label = 'mm') +
+  theme_bw () +
+ labs(y = '', x = 'Eye size residuals') +
+  theme(axis.text.y = element_blank(), 
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(family = "Century Gothic", size = 8), 
+    text = element_text(family = "Century Gothic"),  
+    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold'),
+    legend.position = 'none') #to remove legend
+
+winter_onset_times_plot <- winter_onset_times_plot +
+  theme (axis.title.y = element_blank ()) 
+
+winter_eye_size_begin_times_plot <- winter_eye_size_plot + winter_onset_times_plot +  plot_layout(nrow = 1, widths = c(0.2, 1))
+
+# inspect the visualization
+winter_eye_size_begin_times_plot
+
+# save the plot
+ggsave (winter_eye_size_begin_times_plot,
+  filename = "figs/winter_eye_size_begin_times_plot.png",  width  = 10,
+  height   = 12,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
 ```
 
+##Making a combined plot of summer and winter onset times
+
+```{r}
+#summer
+summer_begin_time <- summer_begin_time %>%
+  mutate (season = 'summer') #adding a column to indicate the seasons
+
+#winter
+winter_begin_time <- winter_begin_time %>%
+  mutate (season = 'winter') 
+
+# obtaining common species between both the seasons
+common_species <- inner_join (summer_begin_time, winter_begin_time, by = c('species', 'common_name', 'scientific_name')) %>% 
+  distinct (species) #gives 63 species
+  
+begin_times <- bind_rows (summer_begin_time, winter_begin_time) %>% #combining both dataframes
+  filter (species %in% common_species$species) #filtering out common species
+
+  median_nautical_dawn <- as_hms ("05:42:00") #setting the median nautical dawn as 5:42 am as there is  only a 11-second difference between the seasons
+  
+# visualization:
+combined_onset_plot <- ggplot(begin_times, aes(x = common_name_ordered, y = median_begin_time, color = season)) +
+  geom_point(shape = 20, size = 4) +
+  geom_hline(yintercept = median_nautical_dawn, size = 0.3) + 
+  annotate("text", x = length(unique(winter_begin_time$common_name))* 0.8, y = as_hms("05:42:00"), label = "Median nautical dawn", 
+           vjust = -0.5, hjust = 1.3, 
+           color = "black", size = 3, family = "Century Gothic", 
+           angle = 90) +
+coord_flip() +
+  theme_bw() +
+  geom_errorbar(aes(ymin = q1, ymax = q3), width = 0.2) + 
+ scale_y_time(limits = hms::as_hms(c("05:00:00", "09:00:00")),
+               labels = scales::time_format("%H:%M"),
+               breaks = hms::as_hms(c("05:00:00", 
+                                      "06:00:00", "07:00:00", 
+                                      "08:00:00", "09:00:00"))) +
+  scale_color_manual(values = c("summer" = "#994F00", "winter" = "#006CD1")) + 
+ labs(y = 'Median time of first dawn vocalization', x = 'Species common name') +
+  theme(
+    axis.text.y = element_markdown(family = "Century Gothic", size = 8),
+    axis.text.x = element_text(family = "Century Gothic", size = 8), 
+    text = element_text(family = "Century Gothic"),
+    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold')
+  )
+
+# inspect the visualization
+combined_onset_plot
+
+# save the plot
+ggsave(combined_onset_plot,
+  filename = "figs/combined_onset_plot.png",  width    = 10,
+  height   = 12,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+```
 
 
 
