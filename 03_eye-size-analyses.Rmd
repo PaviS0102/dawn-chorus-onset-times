@@ -33,7 +33,7 @@ eye_size_ebird_AR <- read.csv ('data/eye-size-ebird-A&R.csv') #file with Macaula
 eye_size_ebird_not_in_AR <- read.csv ('data/eye-size-ebird-not-in-A&R.csv') #file with Macaulay photo-derived eye size estimates, for species for which we don't have comparable measurements from museum specimens
 ```
 
-## Firstly, obtaining a list of species that are present and absent in the eye size dataset- this is only for our reference. Secondly, obtaining a list of i) species for which we are analyzing onset times and have eye size data (museum), and ii) species for which we are analyzing onset times and do not have eye size data (museum)
+## Firstly, obtaining a list of species that are present and absent in the eye size dataset. Secondly, obtaining a list of i) species for which we are analyzing onset times and have eye size data (museum), and ii) species for which we are analyzing onset times and do not have eye size data (museum)
 
 ```{r}
 #1
