@@ -1,0 +1,329 @@
+---
+editor_options: 
+  chunk_output_type: console
+---
+
+# Onset times  
+
+In this script, we will obtain the differences in times at which species vocalizes and plot it.  
+
+## Install required libraries  
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(vegan)
+library(ggplot2)
+library(scico)
+library(data.table)
+library(extrafont)
+library(showtext)
+library(sf)
+library(raster)
+library(lubridate)
+library(suncalc)
+library(lutz)
+library(stringr)
+library(ggtext)
+library(ggpubr)
+library(hms)
+library(lubridate)
+library(ggrepel)
+library(patchwork)
+```
+
+## Loading the data
+
+```{r}
+annotations <- read.csv ('results/data.csv')
+sites <- read.csv("data/list-of-sites.csv")
+species_codes <- read.csv("data/species-annotation-codes.csv")
+eye_size_residuals <- read.csv ("results/eye_size_residuals.csv")
+traits <- read.csv ('data/species-trait-dat.csv') 
+territoriality <- read.csv ('data/territoriality-&-sociality-data.csv')
+vegetation_structure <- read.csv ('data/2020-vegetation-data.csv')
+```
+
+## Modifying the species codes data for further analyses
+
+```{r}
+species_codes <- species_codes %>%
+  rename (species = species_annotation_codes) #changing the name of the column so that it can be appended with the dataframe created in the downstream analyses
+```
+
+## Cleaning the territoriality data
+
+```{r}
+territoriality <- territoriality %>% 
+   dplyr::select(Species, Territory) %>%
+   rename (scientific_name = Species, territoriality = Territory) %>% #renaming it for easier downstream analyses
+   mutate(scientific_name = recode(scientific_name, "Pycnonotus gularis" = "Rubigula gularis", "Ictinaetus malayensis" = "Ictinaetus malaiensis", "Dendrocopos nanus" = "Yungipicus nanus", "Megalaima malabarica" = "Psilopogon malabaricus", "Rhopocichla atriceps" = "Dumetia atriceps", "Chrysocolaptes lucidus" = "Chrysocolaptes guttacristatus", "Luscinia brunnea" = "Larvivora brunnea", "Parus aplonotus" = "Machlolophus aplonotus", "Turdoides striata" = "Argya striata", "Zoothera citrina" = "Geokichla citrina", "Turdoides subrufa" = "Argya subrufa", "Celeus brachyurus" = "Micropternus brachyurus", "Muscicapa ruficauda" = "Ficedula ruficauda", "Bubo nipalensis" = "Ketupa nipalensis", "Stigmatopelia chinensis" = "Spilopelia chinensis", "Acrocephalus aedon" = "Arundinax aedon", "Cyornis pallipes" = "Cyornis pallidipes", "Megalaima viridis" = "Psilopogon viridis", "Garrulax delesserti" = "Pterorhinus delesserti", "Acritillas indica" = "Iole indica")) #to update the names of these species as per our dataset
+```
+
+## Organizing the vegetation structure data- here, we consider foliage score which ranges from 1 to 8 indicating the presence/absence of foliage at different heights from the forest floor
+
+```{r}
+vert_strat <- vegetation_structure %>%
+  dplyr::select (Site_ID, Foliage_score) %>% #retaining only selected columns
+  rename (site_id = Site_ID) %>% #to rename the column
+  mutate(across(everything(), ~str_replace_all(., "_", ""))) %>%
+  group_by (site_id) %>%
+  mutate (Foliage_score = as.numeric (Foliage_score)) %>% 
+  summarise(vert_strat = mean(Foliage_score)) #this gives mean number of forest layers
+```
+
+## Extracting the nautical times for each site and date
+
+```{r}
+annotations <- annotations %>%
+  filter (!species == 'UK') %>% # removing all unidentified annotations
+  rename (site_id = site_code) %>% #changing the name of the column as per the site data
+  left_join (., sites, by = 'site_id') %>% # joining the two dataframes
+  dplyr::select(!c(notes, forest_name, Year.Active, No..saplings.planted, No..species.planted, Planted.area..ha., Distance.to.continuous.forest..m., Remnant.area..ha., Notes,)) %>% # removing unwanted columns
+  rename (lat = latitude, lon = longitude) %>% # renaming the columns
+  ungroup ()
+
+annotations$date <- dmy (annotations$date) #reading the dates in dmy format
+
+nautical_dawn <- getSunlightTimes(data = annotations, 
+  keep = c(
+    "sunrise", 
+    "nauticalDawn"), #keeping sunrise and nautical dawn times
+  tz = "Asia/Kolkata"
+) %>% 
+  distinct(.) 
+
+nautical_dawn$nauticalDawn <- as_hms(nautical_dawn$nauticalDawn) #reading the times in hms format
+
+annotations <- annotations %>%
+  left_join (., nautical_dawn, by = c('lat','lon', 'date')) #now, we have a dataframe with species, their onset times, dates, nautical dawn times, and sunrise times corresponding to each annotation at each site for both the seasons. 
+```
+
+## Filtering species with adequate observations
+
+```{r}
+sp <- annotations %>%
+  group_by (species) %>%
+  summarize (n= n()) %>%
+  filter (!n<10) %>%
+  pull (species) #this helps us only retain those species for which we have atleast 10 observations, i.e. 89 species.
+```
+
+## Creating a summarized dataframe of median relative onset times with quartile ranges, and adding species-specific information to this data
+
+```{r}
+consolidated_data <- annotations %>%
+  filter (species %in% sp) %>% #filtering the selected species
+  dplyr::select (site_id, filename, date, begin_clock_time, species, nauticalDawn, sunrise, peak_freq) %>%
+
+#adding data on site-wise vertifical stratification 
+  left_join (., vert_strat, by = 'site_id') %>%
+  
+ mutate (begin_clock_time_hms = as.POSIXct(begin_clock_time, format = "%H:%M:%S")) %>% #converting to a Posixct object 
+  mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>% #retaining only hours and mins information
+
+#calculating relative onset times as the differences between timing of first vocalization of each species and the nautical dawn at corresponding site, and converting it into minutes by dividing the amount in seconds by 60, before summarizing it as a median
+#also, calculating the median peak frequencies of species and mean vertical stratification of all sites where the species was observed in
+  mutate(relative_onset_times = as.numeric (begin_clock_time_hms-nauticalDawn), units = 'seconds', relative_onset_times = relative_onset_times / 60) %>% 
+  group_by (species) %>%
+  summarise (median_begin_time = median(begin_clock_time_hms), median_relative_onset_time = median(relative_onset_times), q1 = quantile(relative_onset_times, 0.25), q3 = quantile(relative_onset_times, 0.75), median_pf = median(peak_freq), mean_vert_strat = mean (vert_strat)) %>% #calculating the median onset times, median relative onset times, quartile ranges, and median peak frequencies
+
+#joining the species annotation codes dataset
+  inner_join (., species_codes, by = 'species') %>% 
+  mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) %>% #updating the scientific name of yellow-browed bulbul
+
+#adding relative eye size estimates/residuals of the species
+  left_join (., eye_size_residuals, by = c('scientific_name', 'common_name')) %>% 
+  na.omit () %>% #removing those species for which we couldn't obtain eye size data
+  filter (!common_name %in% c("Red-wattled Lapwing", "Spotted Dove", "Malabar Parakeet", "Vernal Hanging-Parrot", "Plum-headed Parakeet", "Malabar Gray Hornbill")) %>% #this gives us 76 species
+  mutate(scientific_name = recode(scientific_name,"Acritillas indica" =  "Iole indica")) %>% #changing the scientific name again 
+  
+#adding territoriality information of the species
+  left_join (., territoriality, by = 'scientific_name') %>% #joining it with the onset times, i.e. outcome dataframe
+  mutate(territoriality = case_when(territoriality %in% "1" ~ "Non-territorial", territoriality %in% "2" ~ "Weakly territorial", territoriality %in% "3" ~ "Highly territorial")) %>%
+  
+#adding trait information of foraging height, body mass, and trophic niche of the species
+  left_join (., traits, by = c('scientific_name', 'common_name')) %>%
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, ebird_residuals, q1, q3, trophic_niche, mass,foraging_habit, median_pf, territoriality, mean_vert_strat) #only keeping columns which are required for further analyses
+
+#This is a consolidated dataframe which contains all the information for downstream analyses.
+
+write.csv (consolidated_data, 'results/consolidated_data.csv')
+```
+
+## Using this consolidated data to add colours and icons to the plot
+
+```{r}
+consolidated_data <- consolidated_data %>%
+
+#giving different colours to indicate the differences in relative onset times
+  mutate (colour = case_when (median_relative_onset_time > 0 & median_relative_onset_time <= 20 ~ '#FFB000',
+                              median_relative_onset_time > 20 & median_relative_onset_time <= 40 ~ '#009E73',
+                              median_relative_onset_time > 40 & median_relative_onset_time <= 60 ~ '#000000',
+                              median_relative_onset_time > 60 & median_relative_onset_time <= 80 ~ '#FE6100',
+                              median_relative_onset_time > 80 ~ '#785EF0')) %>%
+   arrange(median_relative_onset_time) %>%
+
+#using free icons from FontAwesome to represent trophic niches
+  mutate (tn_icon = case_when (trophic_niche == 'Invertivore' ~ '&#xf717;',
+                               trophic_niche == 'Vertivore' ~ '&#xf4ba;',
+                               trophic_niche == 'Nectarivore' ~ '&#xf5d2;',
+                               trophic_niche == 'Granivore' ~ '&#xe2cd;',
+                               trophic_niche == 'Aquatic predator' ~ '&#xf578;',
+                               trophic_niche == 'Frugivore' ~ '&#xf5d1;',
+                               trophic_niche == 'Omnivore' ~ '&#xf06c;')) %>%
+  mutate (font_solid = "fa-solid") %>%
+  mutate(tn_label = paste0("<span style='font-family:", font_solid, "'>", tn_icon, "</span>")) %>%
+  
+#using free icons from FontAwesome to represent foraging habits
+  mutate (fh_icon = case_when (foraging_habit == 'CAN' ~ '&#xf111;',
+                               foraging_habit == 'GRD' ~ '&#xf0c8;',
+                               foraging_habit == 'MID' ~ '&#xf005;',
+                               foraging_habit == 'UND' ~ '&#xe80a;',
+                               foraging_habit == 'AQU' ~ '&#xf219;',
+                               foraging_habit == 'AER' ~ '&#xe139;')) %>%
+  mutate (fh_label = paste0("<span style='font-family:", font_solid, "'>", fh_icon, "</span>")) %>%
+
+#using free icons from FontAwesome to represent territoriality
+  mutate (te_icon = case_when (territoriality == 'Highly territorial' ~ '&#xe510;',
+                               territoriality == 'Weakly territorial' ~ '&#xe50a;',
+                               territoriality == 'Non-territorial' ~ '&#xe50b;')) %>%
+  mutate (te_label = paste0("<span style='font-family:", font_solid, "'>", te_icon, "</span>")) %>%
+  mutate(common_name_styled = paste0("<span style='color:", colour, "'>", common_name, "</span>"), #creating the HTML-styled labels for coloring
+    common_name_ordered = fct_reorder(common_name, median_relative_onset_time)) #create an ordering factor
+```
+
+## Plotting all the relative onset times of 76 species to look at the overall distribution of relative onset times- here, we plainly represent the raw data, i.e. carry out the same steps as above, but without summarizing it
+
+```{r}
+#Organizing the data-
+annotations <- annotations %>%
+  filter (species %in% sp) %>% 
+  dplyr::select (site_id, filename, date, begin_clock_time, species, nauticalDawn, sunrise) %>%
+  mutate (begin_clock_time_hms = as.POSIXct(begin_clock_time, format = "%H:%M:%S")) %>% 
+  mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>%
+  mutate(relative_onset_times = as.numeric (begin_clock_time_hms-nauticalDawn), relative_onset_times = relative_onset_times / 60) %>%
+  inner_join (., species_codes, by = 'species') %>%
+
+#adding all the species-specific information from the consolidated data
+  left_join (., consolidated_data, by = c('scientific_name', 'common_name', 'Order', 'species')) %>%
+  na.omit () %>%
+  mutate (common_name_ordered = fct_reorder(common_name, relative_onset_times)) 
+
+
+#Plotting it as a boxplot-
+rel_onset_times_boxplot <- ggplot(annotations, aes(x = common_name_ordered, y = relative_onset_times, color = colour)) +
+  geom_boxplot (outlier.shape = NA) +
+  geom_jitter (shape = 20, size = 1.2, alpha = 0.5) +
+  coord_flip() +
+  theme_bw() +
+  scale_x_discrete(labels = setNames(annotations$common_name_styled, annotations$common_name_ordered)) +
+  scale_color_identity(guide = "legend", "Difference between onset times and nautical dawn times", labels = c('between 40 to 60 mins', 'between 20 to 40 mins', 'more than 80 mins', 'between 60 to 80 mins', 'between 0 to 20 mins')) + 
+  labs(y = 'Relative onset times (minutes)', x = 'Species common name') +
+  theme(
+    axis.text.y = element_markdown(family = 'Century Gothic', size = 8),
+    axis.text.x = element_text(family = 'Century Gothic', size = 8), 
+    text = element_text(family = 'Century Gothic'),
+    axis.title = element_text(family = 'Century Gothic', size = 14, face = 'bold')
+  )
+
+# inspect the visualization
+rel_onset_times_boxplot
+
+# save the plot
+ggsave (rel_onset_times_boxplot,
+  filename = "figs/rel_onset_times.png",  width    = 14,
+  height   = 16,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+```
+
+## Next, we add all the species-specific information adjacent to this plot
+
+```{r}
+#Eye size-
+#First, we make a vertical plot of only eye size residuals
+eye_size_residuals_plot <- ggplot(consolidated_data, aes(x = 1, y = common_name_ordered)) +
+  geom_point(aes(size = ebird_residuals, color= colour, alpha = 0.9)) +
+  scale_color_identity() +
+  scale_x_continuous(breaks = 1, label = 'residuals') +
+  theme_bw () +
+ labs(y = '', x = 'Eye size') +
+  theme(axis.text.y = element_blank(), 
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(family = "Century Gothic", size = 10), 
+    text = element_text(family = "Century Gothic"),  
+    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold'),
+    legend.position = 'none') #to remove legend
+
+eye_size_residuals_plot #to inspect the visualization
+
+#Trophic niche-
+#First, we make a vertical plot of only trophic niche icons
+trophic_niche_icons <- ggplot(consolidated_data, aes(x = 1, y = common_name_ordered, label = tn_label, color = colour)) + geom_richtext (size = 4, label.colour = NA, fill = NA) +
+  scale_color_identity() +
+  scale_x_continuous(breaks = 1, label = 'symbols') +
+  theme_bw () +
+ labs(y = '', x = 'Trophic Niche') +
+  theme(axis.text.y = element_blank(), 
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(family = "Century Gothic", size = 10), 
+    text = element_text(family = "Century Gothic"),  
+    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold'),
+    legend.text = element_markdown(size = 12))
+
+trophic_niche_icons #to inspect the visualization
+
+#Foraging Height-
+#First, we make a vertical plot of only foraging habit icons
+foraging_habit_icons <- ggplot(consolidated_data, aes(x = 1, y = common_name_ordered, label = fh_label, color = colour)) + geom_richtext (size = 3, label.colour = NA, fill = NA) +
+  scale_color_identity() +
+  scale_x_continuous(breaks = 1, label = 'symbols') +
+  theme_bw () +
+ labs(y = '', x = 'Foraging Habit') +
+  theme(axis.text.y = element_blank(), 
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(family = "Century Gothic", size = 10), 
+    text = element_text(family = "Century Gothic"),  
+    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold'),
+    legend.text = element_markdown(size = 12))
+
+foraging_habit_icons #to inspect the visualization
+
+#Territoriality-
+#First, we make a vertical plot of only territoriality icons
+territoriality_icons <- ggplot(consolidated_data, aes(x = 1, y = common_name_ordered, label = te_label, color = colour)) + geom_richtext (size = 3, label.colour = NA, fill = NA) +
+  scale_color_identity() +
+  scale_x_continuous(breaks = 1, label = 'symbols') +
+  theme_bw () +
+ labs(y = '', x = 'Territoriality') +
+  theme(axis.text.y = element_blank(), 
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(family = "Century Gothic", size = 10), 
+    text = element_text(family = "Century Gothic"),  
+    axis.title = element_text(family = "Century Gothic", size = 14, face = 'bold'),
+    legend.text = element_markdown(size = 12))
+
+territoriality_icons #to inspect the visualization
+
+onset_times_plot <- rel_onset_times_boxplot +
+  theme (axis.title.y = element_blank ()) #removing the y-axis title so that the plots are easier to read
+
+consolidated_plot <- eye_size_residuals_plot + trophic_niche_icons + foraging_habit_icons + territoriality_icons + onset_times_plot + plot_layout(nrow = 1, ncol = 5, widths = c(1,1,1,1,2)) 
+
+# inspect the visualization
+consolidated_plot
+
+# save the plot
+ggsave (consolidated_plot,
+  filename = "figs/consolidated_plot.png",  width  = 20,
+  height   = 16,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+```
+
