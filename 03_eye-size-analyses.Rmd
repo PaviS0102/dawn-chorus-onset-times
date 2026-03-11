@@ -136,7 +136,7 @@ ggsave(cor_plot,
 dev.off()
 ```
 
-#This plot shows a highly significant positive correlation (R = 0.99, p < 0.05) between the residuals of eye size estimates from citizen-science-derived photographs and measurements from museum specimens. Thus, we extend the methodology of estimating eye size estimates from photographs to species for which we do not have comparable museum-based data.
+#This plot shows a highly significant positive correlation (R = 0.79, p < 0.05) between the residuals of eye size estimates from citizen-science-derived photographs and measurements from museum specimens. Thus, we extend the methodology of estimating eye size estimates from photographs to species for which we do not have comparable museum-based data.
 
 #Section II
 ## Cleaning the eye size data (data for species with no comparable data)
@@ -168,7 +168,7 @@ eye_size_ebird <- bind_rows (eye_size_ebird_AR, eye_size_ebird_not_in_AR)
 write.csv (eye_size_ebird, 'results/eye_size_ebird.csv')
 ```
 
-## Then, we obtain the residual eye size estimates of all species
+## Then, we obtain the residual eye size estimates of all species, i.e 84 species
 
 ```{r}
 lm <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird) 
