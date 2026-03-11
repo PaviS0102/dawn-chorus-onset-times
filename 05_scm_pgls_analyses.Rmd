@@ -1,0 +1,154 @@
+---
+title: "04_scm_pgls_analyses"
+output: html_document
+---
+
+# SCM_PGLS_analysis
+
+In this script, we will examine which of the causal variables (peak frequency, vegetation structure, trophic niche, foraging height, eye size, territoriality) best explain the differences in onset times using the structural causal model framework and the analysis method of phylogenetic generalized least squares regression. We use the phylogenetic tree from McTavish et al. 2025. 
+
+## Install required libraries
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(vegan)
+library(ggplot2)
+library(scico)
+library(data.table)
+library(extrafont)
+library(sf)
+library(raster)
+library(lubridate)
+library(suncalc)
+library(lutz)
+library(stringr)
+library(ggtext)
+library(ggpubr)
+library(hms)
+library(clootl)
+library(ape)
+library(nlme)
+library(geiger)
+library(phytools)
+library(phangorn)
+library(phyr)
+library(psych)
+```
+
+## Reading the required data
+
+```{r}
+consolidated_data <- read.csv ('results/consolidated_data.csv')
+```
+
+## Extracting the list of species (scientific names) for phylogeny
+
+```{r}
+species <- consolidated_data %>%
+  distinct (scientific_name) %>%
+  #unique (consolidated_data$scientific_name)
+  mutate(scientific_name = recode(scientific_name, "Accipiter badius" = "Tachyspiza badia"), 
+        scientific_name = recode (scientific_name, "Iole indica" = "Acritillas indica"))
+
+species <- as.character (species$scientific_name) #converting it into character vector
+```
+
+## Extracting a phylogenetic tree of the 67 species
+
+```{r}
+tree <- extractTree (species = species, label_type= "scientific", taxonomy_year= "2025")
+plot (tree)
+```
+
+## Changing the names of two species to match the phylogenetic tree
+
+```{r}
+consolidated_data <- consolidated_data %>%
+  mutate(scientific_name = recode(scientific_name, "Accipiter badius" = "Tachyspiza badia"),   scientific_name = recode (scientific_name, "Iole indica" = "Acritillas indica")) %>%
+  mutate(across(scientific_name, str_replace, " ", "_"))
+```
+
+## Checking species in the tree and the data
+
+```{r}
+setdiff (consolidated_data$scientific_name, tree$tip.label) #to check if all species in the data are on the tree: result 'character (0)'
+
+setdiff (tree$tip.label, consolidated_data$scientific_name) #to check if all species on the tree are in the data: result 'character (0)'
+```
+
+## Testing for correlations among the variables
+
+```{r}
+for_corr <- consolidated_data %>%
+  dplyr::select (scientific_name, median_relative_onset_time, ebird_residuals, mass, trophic_niche, foraging_habit, median_pf, territoriality, mean_vert_strat) %>%
+  mutate (median_relative_onset_time_z = scale (median_relative_onset_time), ebird_residuals_z = scale (ebird_residuals), mass_z = scale (mass), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat)) %>% #scaling the numerical variables
+  dplyr::select (scientific_name, median_relative_onset_time_z, ebird_residuals_z, mass_z, trophic_niche, foraging_habit, median_pf_z, territoriality, mean_vert_strat_z) #only keeping the scaled variables
+
+pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correlated with each other, so we retain all of them
+```
+
+## PGLS Analysis
+
+```{r}
+#Relative onset times ~ trophic niche (adjustment sets: Eye Size*Foraging Height*Peak Frequency + Eye Size*Foraging Height*Vegetation Structure)
+model1 <- consolidated_data %>%
+  gls(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +                                                                          ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")*median_pf +  
+                                   ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")*mean_vert_strat,
+    data = .,
+    correlation = corBrownian(1, tree, form = ~scientific_name))
+
+summary(model1)
+
+#Relative onset times ~ territoriality (adjustment sets: none)
+model2 <- consolidated_data %>%
+  gls(median_relative_onset_time ~ relevel(factor(territoriality), ref = "Non-territorial"),
+    data = .,
+    correlation = corBrownian(1, tree, form = ~scientific_name))
+
+summary(model2)
+
+#Relative onset times ~ foraging height (adjustment sets: Eye Size*Peak Frequency + Eye Size*Vegetation Structure
+model3 <- consolidated_data %>%
+  gls(median_relative_onset_time ~ relevel(factor(foraging_habit), ref = "GRD") + 
+                                   ebird_residuals*median_pf +
+                                   ebird_residuals*mean_vert_strat,
+    data = .,
+    correlation = corBrownian(1, tree, form = ~scientific_name))
+
+summary(model3)
+
+#Relative onset times ~ eye size (adjustment sets: Foraging Height*Peak Frequency + Foraging Height*Vegetation Structure
+model4 <- consolidated_data %>%
+  gls(median_relative_onset_time ~ ebird_residuals + 
+                                   relevel(factor(foraging_habit), ref = "GRD")*median_pf + 
+                                   relevel(factor(foraging_habit), ref = "GRD")*mean_vert_strat ,
+    data = .,
+    correlation = corBrownian(1, tree, form = ~scientific_name))
+
+summary(model4)
+
+#Relative onset times ~ vegetation structure (adjustment sets: Eye Size*Foraging Height* Peak Frequency)
+model5 <- consolidated_data %>%
+  gls(median_relative_onset_time ~ mean_vert_strat +
+                                   ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")*median_pf,
+    data = .,
+    correlation = corBrownian(1, tree, form = ~scientific_name))
+
+summary(model5)
+
+#Relative onset times ~ peak frequency (adjustment sets: Eye size*Foraging Height + Vegetation Structure
+model6 <- consolidated_data %>%
+  gls(median_relative_onset_time ~ ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")+ 
+                                   mean_vert_strat ,
+    data = .,
+    correlation = corBrownian(1, tree, form = ~scientific_name))
+
+summary(model6)
+```
+
+
+
+
+
