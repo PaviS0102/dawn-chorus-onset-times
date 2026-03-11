@@ -46,7 +46,6 @@ consolidated_data <- read.csv ('results/consolidated_data.csv')
 dag <- dagitty("
 dag {
   Foraging_Height -> Eye_Size
-  Body_Mass -> Eye_Size
   Vegetation_Structure -> Foraging_Height
   Vegetation_Structure -> Eye_Size
   Trophic_Niche -> Eye_Size
@@ -59,6 +58,7 @@ dag {
   Vegetation_Structure -> Trophic_Niche
 }
 ") #defining the dag
+#Body_Mass -> Eye_Size- removed since we are using eye size residuals
 
 tidy_dag <- tidy_dagitty (dag) %>% #converting it into a tidyverse object
   mutate (type = case_when (name == 'Eye_Size' ~ 'Collider',
@@ -94,12 +94,12 @@ dev.off()
 ## Obtaining the adjustment sets to test each predictor variable with the outcome variable
 
 ```{r}
-adjustmentSets(dag, exposure = "Trophic_Niche", outcome = "Relative_onset_times") #Vegetation Structure
-adjustmentSets(dag, exposure = "Territoriality", outcome = "Relative_onset_times") #none
-adjustmentSets(dag, exposure = "Foraging_Height", outcome = "Relative_onset_times") #Vegetation Structure
-adjustmentSets(dag, exposure = "Eye_Size", outcome = "Relative_onset_times") #Foraging Height, Peak frequency; Body mass, Foraging Height, Vegetation Structure
-adjustmentSets(dag, exposure = "Vegetation_Structure", outcome = "Relative_onset_times") #none
-adjustmentSets(dag, exposure = "Peak_Frequency", outcome = "Relative_onset_times") #Eye size, Foraging Height; Body mass, Vegetation Structure
+adjustmentSets(dag, exposure = "Trophic_Niche", outcome = "Relative_onset_times", effect = "direct") #Eye Size*Foraging Height*Peak Frequency + Eye Size*Foraging Height*Vegetation Structure
+adjustmentSets(dag, exposure = "Territoriality", outcome = "Relative_onset_times", effect = "direct") #none
+adjustmentSets(dag, exposure = "Foraging_Height", outcome = "Relative_onset_times", effect = "direct") #Eye Size*Peak Frequency + Eye Size*Vegetation Structure
+adjustmentSets(dag, exposure = "Eye_Size", outcome = "Relative_onset_times", effect = "direct") #Foraging Height*Peak Frequency + Foraging Height*Vegetation Structure
+adjustmentSets(dag, exposure = "Vegetation_Structure", outcome = "Relative_onset_times", effect = "direct") #Eye Size*Foraging Height* Peak Frequency
+adjustmentSets(dag, exposure = "Peak_Frequency", outcome = "Relative_onset_times", effect = "direct") #Eye size*Foraging Height + Vegetation Structure
 ```
 
 #Testing the DAG-data consistency: 
