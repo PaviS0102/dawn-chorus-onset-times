@@ -40,6 +40,21 @@ library(psych)
 consolidated_data <- read.csv ('results/consolidated_data.csv')
 ```
 
+## Cleaning the data
+
+```{r}
+consolidated_data <- consolidated_data %>%
+  filter(trophic_niche != "Aquatic predator") %>%
+  filter(trophic_niche != "Granivore") %>%
+  filter(trophic_niche != "Nectarivore") %>%
+  filter(trophic_niche != "Vertivore") %>%
+  filter (foraging_habit != "AER") %>%
+  filter (foraging_habit != "AQU") #removing trophic niches and foraging habit categories that are poorly represented (Aquatic predator- 1 sp; Granivore- 1 sp; Nectarivore- 2 sp; Vertivore- 3 sp; AQU- 1 sp; AER- 1 sp)
+  
+#This leaves us with 67 species for downstream analyses.
+```
+
+
 ## Creating an acyclic graph of the conceptual model
 
 ```{r}
@@ -50,6 +65,7 @@ dag {
   Vegetation_Structure -> Eye_Size
   Trophic_Niche -> Eye_Size
   Body_Mass -> Peak_Frequency
+  Trophic_Niche -> Foraging_Height
   Peak_Frequency -> Relative_onset_times
   Territoriality -> Relative_onset_times
   Eye_Size -> Relative_onset_times
@@ -109,7 +125,8 @@ adjustmentSets(dag, exposure = "Peak_Frequency", outcome = "Relative_onset_times
 ```{r}
 consolidated_data <- consolidated_data %>%
   dplyr::select (median_relative_onset_time, ebird_residuals, trophic_niche, foraging_habit, median_pf, territoriality, mean_vert_strat, mass, scientific_name, common_name) %>% #retaining required columns
-  rename ('Eye_Size' = 'ebird_residuals', 'Relative_onset_times' = 'median_relative_onset_time', 'Trophic_Niche' = 'trophic_niche', 'Foraging_Height' = 'foraging_habit', 'Peak_Frequency' = 'median_pf', 'Territoriality' = 'territoriality', 'Vegetation_Structure' = 'mean_vert_strat', 'Body_Mass' = 'mass') #changing the names of the columns as per the DAG
+  mutate (body_mass = log(mass), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat), ebird_residuals_z = scale (ebird_residuals)) %>% #scaling all the numerical variables
+  rename ('Eye_Size' = 'ebird_residuals_z', 'Relative_onset_times' = 'median_relative_onset_time', 'Trophic_Niche' = 'trophic_niche', 'Foraging_Height' = 'foraging_habit', 'Peak_Frequency' = 'median_pf_z', 'Territoriality' = 'territoriality', 'Vegetation_Structure' = 'mean_vert_strat_z', 'Body_Mass' = 'body_mass') #changing the names of the columns as per the DAG
 ```
   
 ## Checking DAG-data consistency  
@@ -121,7 +138,7 @@ test$p.value <- p.adjust (test$p.value) #to account for false-positive results f
 
 #In this, we test if the conditional independencies implied by the model are true, in which case we are trying to see if the null hypotheses are correct. So, we are looking for non-significant p-values with effect sizes closer to 0.
 
-plotLocalTestResults (test) #this plot shows that the relationships that we have specified in the model have effect sizes that fall on or near 0 on the line, except for three relationships involving trophic niche, peak frequency, foraging height, and vegetation structure, which show effect sizes of 1 with broad confidence intervals.
+plotLocalTestResults (test) #this plot shows that the relationships that we have specified in the model have effect sizes that fall on or near 0 on the line, except for three relationships involving trophic niche, peak frequency, eye size, foraging height, and vegetation structure, which show effect sizes of 1 with broad confidence intervals.
 ```
 
 
