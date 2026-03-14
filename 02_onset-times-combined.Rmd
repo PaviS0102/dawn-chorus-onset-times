@@ -145,16 +145,9 @@ consolidated_data <- annotations %>%
   
 #adding trait information of foraging height, body mass, and trophic niche of the species
   left_join (., traits, by = c('scientific_name', 'common_name')) %>%
-  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, ebird_residuals, q1, q3, trophic_niche, mass,foraging_habit, median_pf, territoriality, mean_vert_strat) %>% #only keeping columns which are required for further analyses
+  dplyr::select (species, median_begin_time, median_relative_onset_time, scientific_name, common_name, Order, ebird_residuals, q1, q3, trophic_niche, mass,foraging_habit, median_pf, territoriality, mean_vert_strat) #only keeping columns which are required for further analyses
 
-  filter(trophic_niche != "Aquatic predator") %>%
-  filter(trophic_niche != "Granivore") %>%
-  filter(trophic_niche != "Nectarivore") %>%
-  filter(trophic_niche != "Vertivore") %>%
-  filter (foraging_habit != "AER") %>%
-  filter (foraging_habit != "AQU") #removing trophic niches and foraging habit categories that are poorly represented (Aquatic predator- 1 sp; Granivore- 1 sp; Nectarivore- 2 sp; Vertivore- 3 sp; AQU- 1 sp; AER- 1 sp)
-  
-#This is a consolidated dataframe for 67 species which contains all the information for downstream analyses.
+#This dataframes gives us data for 76 species.
 
 write.csv (consolidated_data, 'results/consolidated_data.csv')
 ```
@@ -240,8 +233,8 @@ rel_onset_times_boxplot
 
 # save the plot
 ggsave (rel_onset_times_boxplot,
-  filename = "figs/rel_onset_times.png",  width    = 14,
-  height   = 16,
+  filename = "figs/rel_onset_times.png",  width    = 22,
+  height   = 20,
   units    = "in",
   dpi      = 300
 )
