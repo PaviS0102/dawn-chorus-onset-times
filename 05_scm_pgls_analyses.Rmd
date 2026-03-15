@@ -41,6 +41,27 @@ library(psych)
 
 ```{r}
 consolidated_data <- read.csv ('results/consolidated_data.csv')
+avoniche <- read.csv ('data/Avoniche2_eBird2021.csv')
+
+scientific_name <- as.data.frame (consolidated_data$scientific_name)
+
+avoniche <- avoniche %>%
+  rename ('scientific_name' = 'Species2') %>%
+  dplyr::filter (scientific_name %in% consolidated_data$scientific_name)
+```
+
+## Cleaning the data
+
+```{r}
+consolidated_data <- consolidated_data %>%
+  filter(trophic_niche != "Aquatic predator") %>%
+  filter(trophic_niche != "Granivore") %>%
+  filter(trophic_niche != "Nectarivore") %>%
+  filter(trophic_niche != "Vertivore") %>%
+  filter (foraging_habit != "AER") %>%
+  filter (foraging_habit != "AQU") #removing trophic niches and foraging habit categories that are poorly represented (Aquatic predator- 1 sp; Granivore- 1 sp; Nectarivore- 2 sp; Vertivore- 3 sp; AQU- 1 sp; AER- 1 sp)
+  
+#This leaves us with 67 species for downstream analyses.
 ```
 
 ## Extracting the list of species (scientific names) for phylogeny
@@ -83,8 +104,8 @@ setdiff (tree$tip.label, consolidated_data$scientific_name) #to check if all spe
 ```{r}
 for_corr <- consolidated_data %>%
   dplyr::select (scientific_name, median_relative_onset_time, ebird_residuals, mass, trophic_niche, foraging_habit, median_pf, territoriality, mean_vert_strat) %>%
-  mutate (median_relative_onset_time_z = scale (median_relative_onset_time), ebird_residuals_z = scale (ebird_residuals), mass_z = scale (mass), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat)) %>% #scaling the numerical variables
-  dplyr::select (scientific_name, median_relative_onset_time_z, ebird_residuals_z, mass_z, trophic_niche, foraging_habit, median_pf_z, territoriality, mean_vert_strat_z) #only keeping the scaled variables
+  mutate (median_relative_onset_time_z = scale (median_relative_onset_time), ebird_residuals_z = scale (ebird_residuals), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat)) %>% #scaling the numerical variables
+  dplyr::select (scientific_name, median_relative_onset_time_z, ebird_residuals_z, mass, trophic_niche, foraging_habit, median_pf_z, territoriality, mean_vert_strat_z) #only keeping the scaled variables
 
 pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correlated with each other, so we retain all of them
 ```
@@ -92,14 +113,25 @@ pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correl
 ## PGLS Analysis
 
 ```{r}
+consolidated_data <- consolidated_data %>%
+  mutate (ebird_residuals_z = scale (ebird_residuals), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat), mass_z = scale (mass)) #scaling the variables before running the models
+
 #Relative onset times ~ trophic niche (adjustment sets: Eye Size*Foraging Height*Peak Frequency + Eye Size*Foraging Height*Vegetation Structure)
 model1 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +                                                                          ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")*median_pf +  
-                                   ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")*mean_vert_strat,
+  gls(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
+                                   scale (ebird_residuals_z)*relevel(factor(foraging_habit), ref = "CAN")*scale(median_pf_z) +  
+                                   scale(ebird_residuals_z)*relevel(factor(foraging_habit), ref = "CAN")*scale(mean_vert_strat_z),
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
 summary(model1)
+
+#plot exploration
+#par(family = "Century Gothic")
+#plot(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
+                                  ebird_residuals*relevel(factor(foraging_habit), ref = "CAN")*median_pf +  
+                                  ebird_residuals*relevel(factor(foraging_habit), ref = "CAN")*mean_vert_strat, data= #consolidated_data,  xlab = "Trophic Niche", ylab = "Median relative onset times", font.lab = 2, cex.lab=1.5, pch = 19)
+#abline(a = coef(model1)[1], b = coef(model1)[2], lty = 2)
 
 #Relative onset times ~ territoriality (adjustment sets: none)
 model2 <- consolidated_data %>%
@@ -112,8 +144,8 @@ summary(model2)
 #Relative onset times ~ foraging height (adjustment sets: Eye Size*Peak Frequency + Eye Size*Vegetation Structure
 model3 <- consolidated_data %>%
   gls(median_relative_onset_time ~ relevel(factor(foraging_habit), ref = "GRD") + 
-                                   ebird_residuals*median_pf +
-                                   ebird_residuals*mean_vert_strat,
+                                   ebird_residuals_z*median_pf_z +
+                                   ebird_residuals_z*mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
@@ -121,9 +153,9 @@ summary(model3)
 
 #Relative onset times ~ eye size (adjustment sets: Foraging Height*Peak Frequency + Foraging Height*Vegetation Structure
 model4 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ ebird_residuals + 
-                                   relevel(factor(foraging_habit), ref = "GRD")*median_pf + 
-                                   relevel(factor(foraging_habit), ref = "GRD")*mean_vert_strat ,
+  gls(median_relative_onset_time ~ ebird_residuals_z + 
+                                   relevel(factor(foraging_habit), ref = "GRD")*median_pf_z + 
+                                   relevel(factor(foraging_habit), ref = "GRD")*mean_vert_strat_z ,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
@@ -131,8 +163,8 @@ summary(model4)
 
 #Relative onset times ~ vegetation structure (adjustment sets: Eye Size*Foraging Height* Peak Frequency)
 model5 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ mean_vert_strat +
-                                   ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")*median_pf,
+  gls(median_relative_onset_time ~ mean_vert_strat_z +
+                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "GRD")*median_pf_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
@@ -140,8 +172,8 @@ summary(model5)
 
 #Relative onset times ~ peak frequency (adjustment sets: Eye size*Foraging Height + Vegetation Structure
 model6 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ ebird_residuals*relevel(factor(foraging_habit), ref = "GRD")+ 
-                                   mean_vert_strat ,
+  gls(median_relative_onset_time ~ ebird_residuals_z*relevel(factor(foraging_habit), ref = "GRD")+ 
+                                   mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
