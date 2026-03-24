@@ -119,8 +119,8 @@ consolidated_data <- consolidated_data %>%
 #Relative onset times ~ trophic niche (adjustment sets: Eye Size*Foraging Height*Peak Frequency + Eye Size*Foraging Height*Vegetation Structure)
 model1 <- consolidated_data %>%
   gls(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
-                                   scale (ebird_residuals_z)*relevel(factor(foraging_habit), ref = "CAN")*scale(median_pf_z) +  
-                                   scale(ebird_residuals_z)*relevel(factor(foraging_habit), ref = "CAN")*scale(mean_vert_strat_z),
+                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "CAN")*median_pf_z +  
+                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "CAN")*mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
@@ -172,7 +172,8 @@ summary(model5)
 
 #Relative onset times ~ peak frequency (adjustment sets: Eye size*Foraging Height + Vegetation Structure
 model6 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ ebird_residuals_z*relevel(factor(foraging_habit), ref = "GRD")+ 
+  gls(median_relative_onset_time ~ median_pf_z + 
+                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "GRD")+ 
                                    mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
