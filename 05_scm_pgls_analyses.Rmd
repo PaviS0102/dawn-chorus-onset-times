@@ -41,13 +41,6 @@ library(psych)
 
 ```{r}
 consolidated_data <- read.csv ('results/consolidated_data.csv')
-avoniche <- read.csv ('data/Avoniche2_eBird2021.csv')
-
-scientific_name <- as.data.frame (consolidated_data$scientific_name)
-
-avoniche <- avoniche %>%
-  rename ('scientific_name' = 'Species2') %>%
-  dplyr::filter (scientific_name %in% consolidated_data$scientific_name)
 ```
 
 ## Cleaning the data
@@ -116,22 +109,17 @@ pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correl
 consolidated_data <- consolidated_data %>%
   mutate (ebird_residuals_z = scale (ebird_residuals), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat), mass_z = scale (mass)) #scaling the variables before running the models
 
-#Relative onset times ~ trophic niche (adjustment sets: Eye Size*Foraging Height*Peak Frequency + Eye Size*Foraging Height*Vegetation Structure)
+#Relative onset times ~ trophic niche (adjustment sets: Eye size, Foraging height, Vegetation structure)
 model1 <- consolidated_data %>%
   gls(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
-                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "CAN")*median_pf_z +  
-                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "CAN")*mean_vert_strat_z,
+                                   ebird_residuals_z +  
+                                   relevel(factor(foraging_habit), ref = "CAN") +
+                                   mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
-summary(model1)
-
-#plot exploration
-#par(family = "Century Gothic")
-#plot(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
-                                  ebird_residuals*relevel(factor(foraging_habit), ref = "CAN")*median_pf +  
-                                  ebird_residuals*relevel(factor(foraging_habit), ref = "CAN")*mean_vert_strat, data= #consolidated_data,  xlab = "Trophic Niche", ylab = "Median relative onset times", font.lab = 2, cex.lab=1.5, pch = 19)
-#abline(a = coef(model1)[1], b = coef(model1)[2], lty = 2)
+summary(model1) #gives the estimates, standard error, and p-values
+confint (model1) #to obtain the lower and upper confidence intervals
 
 #Relative onset times ~ territoriality (adjustment sets: none)
 model2 <- consolidated_data %>%
@@ -140,45 +128,84 @@ model2 <- consolidated_data %>%
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
 summary(model2)
+confint (model2)
 
-#Relative onset times ~ foraging height (adjustment sets: Eye Size*Peak Frequency + Eye Size*Vegetation Structure
+#Relative onset times ~ foraging height (adjustment sets: Eye Size, Vegetation structure)
 model3 <- consolidated_data %>%
   gls(median_relative_onset_time ~ relevel(factor(foraging_habit), ref = "GRD") + 
-                                   ebird_residuals_z*median_pf_z +
-                                   ebird_residuals_z*mean_vert_strat_z,
+                                   ebird_residuals_z +
+                                   mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
 summary(model3)
+confint (model3)
 
-#Relative onset times ~ eye size (adjustment sets: Foraging Height*Peak Frequency + Foraging Height*Vegetation Structure
+#Relative onset times ~ eye size (adjustment sets: Foraging Height, Vegetation Structure)
 model4 <- consolidated_data %>%
   gls(median_relative_onset_time ~ ebird_residuals_z + 
-                                   relevel(factor(foraging_habit), ref = "GRD")*median_pf_z + 
-                                   relevel(factor(foraging_habit), ref = "GRD")*mean_vert_strat_z ,
+                                   relevel(factor(foraging_habit), ref = "GRD") + 
+                                   mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
 summary(model4)
+confint (model4)
 
-#Relative onset times ~ vegetation structure (adjustment sets: Eye Size*Foraging Height* Peak Frequency)
+#plotting the results of the model since eye size shows a marginally significant cause-effect relationship with onset times (p = 0.0896)
+font_add('fa-solid', 'data/fonts/Font Awesome 7 Free-Solid-900.otf') #loading solid font for fontawesome icon of eyes on the plot
+
+eye_size_model_plot <- ggplot(consolidated_data, aes(x=ebird_residuals_z, y=median_relative_onset_time)) +
+  geom_point(shape = 20, size = 5) +
+  geom_abline(intercept = coef(model4)[1],
+              slope = coef(model4)[2]) +
+ labs(y = 'Median relative onset times (minutes)', x = 'Residual eye size') +
+  theme_bw() +
+  theme(axis.text.y = element_markdown(family = 'Century Gothic', size = 12),
+    axis.text.x = element_text(family = 'Century Gothic', size = 12), 
+    text = element_text(family = 'Century Gothic'), 
+    axis.title = element_text(family = 'Century Gothic', size = 18, face = 'bold')) +
+  annotate("text", x = 1,
+     y = 125,
+     label = paste ("estimate = -7.124; std error = 4.129; p = 0.0896"),
+    color = "black",
+     family = "Century Gothic", size = 10) +
+  geom_richtext(x = -2.5, y = 48, label = "<span style='font-family:fa-solid;'>&#xf06e;</span>", size = 15, label.colour = NA, col = '#FE6100') +
+  geom_richtext(x = 2, y = 13, label = "<span style='font-family:fa-solid;'>&#xf06e;</span>", size = 30, label.colour = NA, col = '#FE6100')
+
+# inspect the visualization
+eye_size_model_plot
+
+# save the plot
+ggsave (eye_size_model_plot,
+  filename = "figs/eye_size_model_plot.png",  width    = 8,
+  height   = 6,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+  
+#Relative onset times ~ vegetation structure (adjustment sets: Eye Size, Foraging Height, Peak Frequency)
 model5 <- consolidated_data %>%
   gls(median_relative_onset_time ~ mean_vert_strat_z +
-                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "GRD")*median_pf_z,
+                                   ebird_residuals_z + 
+                                   relevel(factor(foraging_habit), ref = "GRD") +
+                                   median_pf_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
 summary(model5)
+confint (model5)
 
-#Relative onset times ~ peak frequency (adjustment sets: Eye size*Foraging Height + Vegetation Structure
+#Relative onset times ~ peak frequency (adjustment sets: Vegetation Structure)
 model6 <- consolidated_data %>%
   gls(median_relative_onset_time ~ median_pf_z + 
-                                   ebird_residuals_z*relevel(factor(foraging_habit), ref = "GRD")+ 
                                    mean_vert_strat_z,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
 summary(model6)
+confint (model6)
 ```
 
 
