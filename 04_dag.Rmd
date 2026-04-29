@@ -63,6 +63,7 @@ dag {
   Foraging_Height -> Eye_Size
   Vegetation_Structure -> Foraging_Height
   Vegetation_Structure -> Eye_Size
+  Vegetation_Structure -> Relative_onset_times
   Trophic_Niche -> Eye_Size
   Body_Mass -> Peak_Frequency
   Trophic_Niche -> Foraging_Height
@@ -76,21 +77,14 @@ dag {
 ") #defining the dag
 #Body_Mass -> Eye_Size- removed since we are using eye size residuals
 
-tidy_dag <- tidy_dagitty (dag) %>% #converting it into a tidyverse object
-  mutate (type = case_when (name == 'Eye_Size' ~ 'Collider',
-                            name == 'Relative_onset_times' ~ 'Response',
-                            name == 'Peak_Frequency' ~ 'Collider',
-                            name == 'Ambient_temperature' ~ 'Unmodelled Variable',
-                            name == 'Precipitation' ~ 'Unmodelled Variable',
-                            name == 'Cloud_cover' ~ 'Unmodelled Variable', .default = 'Non-collider')) #labelling the response, collider, and non-collider variables
+tidy_dag <- tidy_dagitty (dag) #converting it into a tidyverse object
 
 set.seed (123)
-dag_plot <- ggplot(tidy_dag, aes(x = x, y = y, xend = xend, yend = yend, color = type)) +
+dag_plot <- ggplot(tidy_dag, aes(x = x, y = y, xend = xend, yend = yend)) +#color = type)) +
   geom_dag_point() +
   geom_dag_edges() +
   theme_dag () +
-  geom_dag_text(family = "Century Gothic", color = 'black', size = 6, fontface = 1) +
-  scale_colour_manual("Type of variable", values = c("Collider" = "#FFB000", "Non-collider" = "#009E73", "Response" = '#785EF0', "Unmodelled Variable" = "#88CCEE")) +
+  geom_dag_text(family = "Century Gothic", color = 'red', size = 6, fontface = 1) +
   theme(legend.position = 'right', 
         legend.text = element_text (size = 15, color = 'black', family = "Century Gothic"),
         legend.title = element_text (size = 15, color = 'black', family = "Century Gothic"))
@@ -110,12 +104,12 @@ dev.off()
 ## Obtaining the adjustment sets to test each predictor variable with the outcome variable
 
 ```{r}
-adjustmentSets(dag, exposure = "Trophic_Niche", outcome = "Relative_onset_times", effect = "direct") #Eye Size*Foraging Height*Peak Frequency + Eye Size*Foraging Height*Vegetation Structure
+adjustmentSets(dag, exposure = "Trophic_Niche", outcome = "Relative_onset_times", effect = "direct") #Eye_Size, Foraging_Height, Vegetation_Structure
 adjustmentSets(dag, exposure = "Territoriality", outcome = "Relative_onset_times", effect = "direct") #none
-adjustmentSets(dag, exposure = "Foraging_Height", outcome = "Relative_onset_times", effect = "direct") #Eye Size*Peak Frequency + Eye Size*Vegetation Structure
-adjustmentSets(dag, exposure = "Eye_Size", outcome = "Relative_onset_times", effect = "direct") #Foraging Height*Peak Frequency + Foraging Height*Vegetation Structure
-adjustmentSets(dag, exposure = "Vegetation_Structure", outcome = "Relative_onset_times", effect = "direct") #Eye Size*Foraging Height* Peak Frequency
-adjustmentSets(dag, exposure = "Peak_Frequency", outcome = "Relative_onset_times", effect = "direct") #Eye size*Foraging Height + Vegetation Structure
+adjustmentSets(dag, exposure = "Foraging_Height", outcome = "Relative_onset_times", effect = "direct") #Eye Size, Vegetation Structure
+adjustmentSets(dag, exposure = "Eye_Size", outcome = "Relative_onset_times", effect = "direct") #Foraging Height, Vegetation Structure
+adjustmentSets(dag, exposure = "Vegetation_Structure", outcome = "Relative_onset_times", effect = "direct") #Eye Size, Foraging Height, Peak Frequency
+adjustmentSets(dag, exposure = "Peak_Frequency", outcome = "Relative_onset_times", effect = "direct") #Vegetation Structure
 ```
 
 #Testing the DAG-data consistency: 
@@ -138,7 +132,7 @@ test$p.value <- p.adjust (test$p.value) #to account for false-positive results f
 
 #In this, we test if the conditional independencies implied by the model are true, in which case we are trying to see if the null hypotheses are correct. So, we are looking for non-significant p-values with effect sizes closer to 0.
 
-plotLocalTestResults (test) #this plot shows that the relationships that we have specified in the model have effect sizes that fall on or near 0 on the line, except for three relationships involving trophic niche, peak frequency, eye size, foraging height, and vegetation structure, which show effect sizes of 1 with broad confidence intervals.
+plotLocalTestResults (test) #this plot shows conditional independence statements on the y-axis and test statistic on the x-axis. Those variables for which the points are at 0- the conditional independencies (A|B: A is independent of B; A||B|C: A is independent of B given C) specified by the dag hold true for the data as well. Those variables, specifically i) independence between Territoriality and Trophic niche, ii) Peak frequency and Trophic niche, given Vegetation structure, iii) Foraging Height and Peak Frequency, given Vegetation structure, and iv) Eye size and Peak frequency, given Vegetation structure, suggests that the conditional independence specified in the dag doesn't hold true for the data. Territoriality and Trophic niche show a narrow confidence interval hinting at dag-data inconsistency, whereas the others show wide confidence intervals hints at incconclusive evidence at dag-data inconsistency.
 ```
 
 
