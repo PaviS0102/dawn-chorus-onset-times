@@ -96,9 +96,9 @@ setdiff (tree$tip.label, consolidated_data$scientific_name) #to check if all spe
 
 ```{r}
 for_corr <- consolidated_data %>%
-  dplyr::select (scientific_name, median_relative_onset_time, ebird_residuals, mass, trophic_niche, foraging_habit, median_pf, territoriality, mean_vert_strat) %>%
-  mutate (median_relative_onset_time_z = scale (median_relative_onset_time), ebird_residuals_z = scale (ebird_residuals), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat)) %>% #scaling the numerical variables
-  dplyr::select (scientific_name, median_relative_onset_time_z, ebird_residuals_z, mass, trophic_niche, foraging_habit, median_pf_z, territoriality, mean_vert_strat_z) #only keeping the scaled variables
+  dplyr::select (scientific_name, relative_onset_times, ebird_residuals, mass, trophic_niche, foraging_habit, peak_freq, territoriality, vert_strat) %>%
+  mutate (relative_onset_time_z = scale (relative_onset_times), ebird_residuals_z = scale (ebird_residuals), pf_z = scale (peak_freq), vert_strat_z = scale (vert_strat)) %>% #scaling the numerical variables
+  dplyr::select (scientific_name, relative_onset_time_z, ebird_residuals_z, mass, trophic_niche, foraging_habit, pf_z, territoriality, vert_strat_z) #only keeping the scaled variables
 
 pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correlated with each other, so we retain all of them
 ```
@@ -106,20 +106,20 @@ pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correl
 ## PGLS Analysis
 
 ```{r}
-consolidated_data <- consolidated_data %>%
-  mutate (ebird_residuals_z = scale (ebird_residuals), median_pf_z = scale (median_pf), mean_vert_strat_z = scale (mean_vert_strat), mass_z = scale (mass)) #scaling the variables before running the models
+consolidated_data <- consolidated_data  %>%
+  mutate (ebird_residuals_z = scale (ebird_residuals), peak_freq_z = scale (peak_freq), vert_strat_z = scale (vert_strat), mass_z = scale (mass))
 
 #Relative onset times ~ trophic niche (adjustment sets: Eye size, Foraging height, Vegetation structure)
 model1 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
-                                   ebird_residuals_z +  
+  gls(relative_onset_times ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
+                                   ebird_residuals +  
                                    relevel(factor(foraging_habit), ref = "CAN") +
-                                   mean_vert_strat_z,
+                                   vert_strat,
     data = .,
     correlation = corBrownian(1, tree, form = ~scientific_name))
 
-summary(model1) #gives the estimates, standard error, and p-values
-confint (model1) #to obtain the lower and upper confidence intervals
+summary(model1) 
+confint (model1) #only run this model
 
 #Relative onset times ~ territoriality (adjustment sets: none)
 model2 <- consolidated_data %>%
