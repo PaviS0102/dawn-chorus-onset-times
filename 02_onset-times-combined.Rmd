@@ -210,15 +210,17 @@ dev.off()
 ## ii) Plotting the data- for each season separately
 
 ```{r}
+#making separate dataframes for each season
 summer_consolidated_data <- consolidated_data %>%
-  filter (season %in% 'summer') #making separate dataframes for each season
+  filter (season %in% 'summer') 
 winter_consolidated_data <- consolidated_data %>%
   filter (season %in% 'winter')
  
 common_sp <- intersect (summer_consolidated_data$scientific_name, winter_consolidated_data$scientific_name) #finding the species common across both seasons, i.e. 72 species
 
+#filtering the common species
 summer_consolidated_data <- summer_consolidated_data %>%
-  filter (scientific_name %in% common_sp) #filtering the common species
+  filter (scientific_name %in% common_sp) 
 winter_consolidated_data <- winter_consolidated_data %>%
   filter (scientific_name %in% common_sp) 
 
