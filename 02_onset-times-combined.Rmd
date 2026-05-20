@@ -143,7 +143,7 @@ consolidated_data <- annotations %>%
   left_join (., traits, by = c('scientific_name', 'common_name')) %>%
   dplyr::select (site_id, date, filename, species, begin_clock_time_hms, nauticalDawn, sunrise, peak_freq, vert_strat, relative_onset_times, scientific_name, common_name, ebird_residuals, foraging_habit, territoriality, mass, trophic_niche, season)
 
-#This dataframes gives us data for 74 species.
+#This dataframes gives us data for 74 species (and it doesn't include any raptors).
 
 write.csv (consolidated_data, 'results/consolidated_data.csv')
 ```
