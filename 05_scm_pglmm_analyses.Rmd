@@ -69,7 +69,7 @@ species <- consolidated_data %>%
 species <- as.character (species$scientific_name) #converting it into character vector
 ```
 
-## Extracting a phylogenetic tree of the 67 species
+## Extracting a phylogenetic tree and obtaining a phylogenetic correlation matrix of the 67 species
 
 ```{r}
 tree <- extractTree (species = species, label_type= "scientific", taxonomy_year= "2025")
@@ -82,14 +82,16 @@ plot (tree)
 consolidated_data <- consolidated_data %>%
   mutate(scientific_name = recode(scientific_name, "Accipiter badius" = "Tachyspiza badia"),   scientific_name = recode (scientific_name, "Iole indica" = "Acritillas indica")) %>%
   mutate(across(scientific_name, str_replace, " ", "_"))
+
+scientific_names <- unique (consolidated_data$scientific_name) #extracting only the unique scientific names (to check for match with the phylogenetic tree)
 ```
 
 ## Checking species in the tree and the data
 
 ```{r}
-setdiff (consolidated_data$scientific_name, tree$tip.label) #to check if all species in the data are on the tree: result 'character (0)'
+setdiff (scientific_names, tree$tip.label) #to check if all species in the data are on the tree: result 'character (0)'
 
-setdiff (tree$tip.label, consolidated_data$scientific_name) #to check if all species on the tree are in the data: result 'character (0)'
+setdiff (tree$tip.label, scientific_names) #to check if all species on the tree are in the data: result 'character (0)'
 ```
 
 ## Testing for correlations among the variables
@@ -103,23 +105,22 @@ for_corr <- consolidated_data %>%
 pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correlated with each other, so we retain all of them
 ```
 
-## PGLS Analysis
+## PGLMM Analysis
 
 ```{r}
-consolidated_data <- consolidated_data  %>%
-  mutate (ebird_residuals_z = scale (ebird_residuals), peak_freq_z = scale (peak_freq), vert_strat_z = scale (vert_strat), mass_z = scale (mass))
+# renaming site and sp columns
+consolidated_data <- consolidated_data %>% 
+  rename(., sp = scientific_name) %>%
+  rename(., site = site_id)
 
 #Relative onset times ~ trophic niche (adjustment sets: Eye size, Foraging height, Vegetation structure)
-model1 <- consolidated_data %>%
-  gls(relative_onset_times ~ relevel(factor(trophic_niche), ref = "Frugivore") +  
-                                   ebird_residuals +  
-                                   relevel(factor(foraging_habit), ref = "CAN") +
-                                   vert_strat,
-    data = .,
-    correlation = corBrownian(1, tree, form = ~scientific_name))
+model1 <- pglmm(relative_onset_times ~ relevel (factor(trophic_niche), ref = 'Frugivore') +
+                 scale(ebird_residuals) + 
+                 relevel(factor(foraging_habit), ref = "GRD") + 
+                 scale (vert_strat) + 
+                 (1 | site) + (1 | sp__), 
+                data = consolidated_data, cov_ranef = list(sp = tree)) #please check this model
 
-summary(model1) 
-confint (model1) #only run this model
 
 #Relative onset times ~ territoriality (adjustment sets: none)
 model2 <- consolidated_data %>%
