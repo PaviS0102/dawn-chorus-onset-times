@@ -209,6 +209,122 @@ dev.off()
 
 ## ii) Plotting the data- for each season separately
 
+## Making separate dataframes for each season
+
+```{r}
+summer_consolidated_data <- consolidated_data %>%
+  filter (season %in% 'summer') 
+winter_consolidated_data <- consolidated_data %>%
+  filter (season %in% 'winter')
+```
+
+## Extracting species common across both seasons
+
+```{r}
+common_sp <- intersect (summer_consolidated_data$scientific_name, winter_consolidated_data$scientific_name) #finding the species common across both seasons, i.e. 72 species
+```
+
+## Now, filtering the species common across both seasons
+
+```{r}
+summer_consolidated_data <- summer_consolidated_data %>%
+  filter (scientific_name %in% common_sp) 
+winter_consolidated_data <- winter_consolidated_data %>%
+  filter (scientific_name %in% common_sp)
+```
+
+## Creating dataframes for each season with median, 1st and 3rd quantiles (for reference) for colouring the species accordingly
+
+```{r}
+summer_median_onset_times <- summer_consolidated_data %>%
+  group_by (species, common_name) %>%
+  summarise (median_relative_onset_time = median(relative_onset_times), q1 = quantile(relative_onset_times, 0.25), q3 = quantile(relative_onset_times, 0.75)) %>%
+  mutate (colour = case_when (median_relative_onset_time > 0 & median_relative_onset_time <= 20 ~ '#FFB000',
+                              median_relative_onset_time > 20 & median_relative_onset_time <= 40 ~ '#009E73',
+                              median_relative_onset_time > 40 & median_relative_onset_time <= 60 ~ '#000000',
+                              median_relative_onset_time > 60 & median_relative_onset_time <= 80 ~ '#FE6100',
+                              median_relative_onset_time > 80 ~ '#785EF0')) %>%
+  arrange(median_relative_onset_time) %>%
+  mutate(common_name_styled = paste0("<span style='color:", colour, "'>", common_name, "</span>"), 
+     common_name_ordered = fct_reorder(common_name, median_relative_onset_time)) 
+
+winter_median_onset_times <- winter_consolidated_data %>%
+  group_by (species, common_name) %>%
+  summarise (median_relative_onset_time = median(relative_onset_times), q1 = quantile(relative_onset_times, 0.25), q3 = quantile(relative_onset_times, 0.75)) %>%
+  mutate (colour = case_when (median_relative_onset_time > 0 & median_relative_onset_time <= 20 ~ '#FFB000',
+                              median_relative_onset_time > 20 & median_relative_onset_time <= 40 ~ '#009E73',
+                              median_relative_onset_time > 40 & median_relative_onset_time <= 60 ~ '#000000',
+                              median_relative_onset_time > 60 & median_relative_onset_time <= 80 ~ '#FE6100',
+                              median_relative_onset_time > 80 ~ '#785EF0')) %>%
+  arrange(median_relative_onset_time) %>%
+  mutate(common_name_styled = paste0("<span style='color:", colour, "'>", common_name, "</span>"), 
+     common_name_ordered = fct_reorder(common_name, median_relative_onset_time))
+```
+
+## Plotting the data
+
+```{r}
+sum_rel_onset_times_boxplot <- ggplot(summer_consolidated_data, aes(x = fct_reorder (common_name,median_relative_onset_time), y = relative_onset_times, color = colour)) +
+  geom_boxplot (outlier.shape = NA) +
+  geom_jitter (shape = 20, size = 1.2, alpha = 0.5) +
+  coord_flip() +
+  theme_bw() +
+  scale_x_discrete(labels = setNames(summer_consolidated_data$common_name_styled, summer_consolidated_data$common_name_ordered)) +
+  scale_color_identity(guide = "legend", "Difference between onset times and nautical dawn times", labels = c('between 40 to 60 mins', 'between 20 to 40 mins', 'more than 80 mins', 'between 60 to 80 mins', 'between 0 to 20 mins')) + 
+  labs(y = 'Relative onset times (minutes)', x = 'Species common name') +
+  theme(
+    axis.text.y = element_markdown(family = 'Century Gothic', size = 14),
+    axis.text.x = element_text(family = 'Century Gothic', size = 14), 
+    text = element_text(family = 'Century Gothic'),
+    axis.title = element_text(family = 'Century Gothic', size = 20, face = 'bold'),
+    legend.text = element_text(family = 'Century Gothic', size = 14),
+    legend.title = element_text(family = 'Century Gothic', size = 20)
+  )
+
+# inspect the visualization
+sum_rel_onset_times_boxplot
+
+# save the plot
+ggsave (sum_rel_onset_times_boxplot,
+  filename = "figs/sum_rel_onset_times.png",  width    = 16,
+  height   = 18,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+
+win_rel_onset_times_boxplot <- ggplot(winter_consolidated_data, aes(x = fct_reorder (common_name,median_relative_onset_time), y = relative_onset_times, color = colour)) +
+  geom_boxplot (outlier.shape = NA) +
+  geom_jitter (shape = 20, size = 1.2, alpha = 0.5) +
+  coord_flip() +
+  theme_bw() +
+  scale_x_discrete(labels = setNames(winter_consolidated_data$common_name_styled, winter_consolidated_data$common_name_ordered)) +
+  scale_color_identity(guide = "legend", "Difference between onset times and nautical dawn times", labels = c('between 40 to 60 mins', 'between 20 to 40 mins', 'more than 80 mins', 'between 60 to 80 mins', 'between 0 to 20 mins')) + 
+  labs(y = 'Relative onset times (minutes)', x = 'Species common name') +
+  theme(
+    axis.text.y = element_markdown(family = 'Century Gothic', size = 14),
+    axis.text.x = element_text(family = 'Century Gothic', size = 14), 
+    text = element_text(family = 'Century Gothic'),
+    axis.title = element_text(family = 'Century Gothic', size = 20, face = 'bold'),
+    legend.text = element_text(family = 'Century Gothic', size = 14),
+    legend.title = element_text(family = 'Century Gothic', size = 20)
+  )
+
+# inspect the visualization
+win_rel_onset_times_boxplot
+
+# save the plot
+ggsave (win_rel_onset_times_boxplot,
+  filename = "figs/win_rel_onset_times.png",  width    = 16,
+  height   = 18,
+  units    = "in",
+  dpi      = 300
+)
+dev.off()
+
+```
+
+
 ```{r}
 #making separate dataframes for each season
 summer_consolidated_data <- consolidated_data %>%
