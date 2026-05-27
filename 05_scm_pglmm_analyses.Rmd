@@ -99,13 +99,13 @@ setdiff (tree$tip.label, scientific_names) #to check if all species on the tree 
 ```{r}
 for_corr <- consolidated_data %>%
   dplyr::select (scientific_name, relative_onset_times, ebird_residuals, mass, trophic_niche, foraging_habit, peak_freq, territoriality, vert_strat) %>%
-  mutate (relative_onset_time_z = scale (relative_onset_times), ebird_residuals_z = scale (ebird_residuals), pf_z = scale (peak_freq), vert_strat_z = scale (vert_strat)) %>% #scaling the numerical variables
-  dplyr::select (scientific_name, relative_onset_time_z, ebird_residuals_z, mass, trophic_niche, foraging_habit, pf_z, territoriality, vert_strat_z) #only keeping the scaled variables
+  mutate (relative_onset_time_z = scale (relative_onset_times), pf_z = scale (peak_freq), vert_strat_z = scale (vert_strat)) %>% #scaling the numerical variables
+  dplyr::select (scientific_name, relative_onset_time_z, ebird_residuals, mass, trophic_niche, foraging_habit, pf_z, territoriality, vert_strat_z) #only keeping the scaled variables
 
 pairs.panels(for_corr[, c(2:9)]) #none of the variables are significantly correlated with each other, so we retain all of them
 ```
 
-## PGLMM Analysis
+## PGLMM Analyses
 
 ```{r}
 # renaming site and sp columns
@@ -113,42 +113,42 @@ consolidated_data <- consolidated_data %>%
   rename(., sp = scientific_name) %>%
   rename(., site = site_id)
 
-#Relative onset times ~ trophic niche (adjustment sets: Eye size, Foraging height, Vegetation structure)
-model1 <- pglmm(relative_onset_times ~ relevel (factor(trophic_niche), ref = 'Frugivore') +
-                 scale(ebird_residuals) + 
-                 relevel(factor(foraging_habit), ref = "GRD") + 
-                 scale (vert_strat) + 
-                 (1 | site) + (1 | sp__), 
-                data = consolidated_data, cov_ranef = list(sp = tree)) #please check this model
+# checking the distribution of onset times to help decide the family for pglmm
+hist (consolidated_data$relative_onset_times)
+abline (v = mean(consolidated_data$relative_onset_times))
 
+#Relative onset times ~ trophic niche (adjustment sets: Vegetation structure)
+model1 <- pglmm(relative_onset_times ~ relevel (factor(trophic_niche), ref = 'Frugivore') +
+                 scale (vert_strat) + 
+                 (1 | sp__) + (1|site), 
+                data = consolidated_data, cov_ranef = list(sp = tree)) 
+summary (model1)
+confit (model1)
 
 #Relative onset times ~ territoriality (adjustment sets: none)
-model2 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ relevel(factor(territoriality), ref = "Non-territorial"),
-    data = .,
-    correlation = corBrownian(1, tree, form = ~scientific_name))
+model2 <- pglmm(relative_onset_times ~ relevel(factor(territoriality), ref = "Non-territorial") + 
+                 (1 | sp__) + (1|site), 
+                data = consolidated_data, cov_ranef = list(sp = tree)) 
 
 summary(model2)
 confint (model2)
 
-#Relative onset times ~ foraging height (adjustment sets: Eye Size, Vegetation structure)
-model3 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ relevel(factor(foraging_habit), ref = "GRD") + 
-                                   ebird_residuals_z +
-                                   mean_vert_strat_z,
-    data = .,
-    correlation = corBrownian(1, tree, form = ~scientific_name))
+#Relative onset times ~ foraging height (adjustment sets: Trophic niche, Vegetation structure)
+model3 <- pglmm(relative_onset_times ~ relevel(factor(foraging_habit), ref = "GRD") +
+                relevel (factor(trophic_niche), ref = 'Frugivore') +
+                 scale (vert_strat) + 
+                 (1 | sp__) + (1|site), 
+                data = consolidated_data, cov_ranef = list(sp = tree)) 
 
 summary(model3)
 confint (model3)
 
 #Relative onset times ~ eye size (adjustment sets: Foraging Height, Vegetation Structure)
-model4 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ ebird_residuals_z + 
-                                   relevel(factor(foraging_habit), ref = "GRD") + 
-                                   mean_vert_strat_z,
-    data = .,
-    correlation = corBrownian(1, tree, form = ~scientific_name))
+model3 <- pglmm(relative_onset_times ~ ebird_residuals + 
+                relevel(factor(foraging_habit), ref = "GRD") +
+                scale (vert_strat) + 
+                 (1 | sp__) + (1|site), 
+                data = consolidated_data, cov_ranef = list(sp = tree)) 
 
 summary(model4)
 confint (model4)
@@ -186,24 +186,19 @@ ggsave (eye_size_model_plot,
 )
 dev.off()
   
-#Relative onset times ~ vegetation structure (adjustment sets: Eye Size, Foraging Height, Peak Frequency)
-model5 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ mean_vert_strat_z +
-                                   ebird_residuals_z + 
-                                   relevel(factor(foraging_habit), ref = "GRD") +
-                                   median_pf_z,
-    data = .,
-    correlation = corBrownian(1, tree, form = ~scientific_name))
+#Relative onset times ~ vegetation structure (adjustment sets: none)
+model5 <- pglmm(relative_onset_times ~ scale (vert_strat) + 
+                 (1 | sp__) + (1|site), 
+                data = consolidated_data, cov_ranef = list(sp = tree)) 
 
 summary(model5)
 confint (model5)
 
 #Relative onset times ~ peak frequency (adjustment sets: Vegetation Structure)
-model6 <- consolidated_data %>%
-  gls(median_relative_onset_time ~ median_pf_z + 
-                                   mean_vert_strat_z,
-    data = .,
-    correlation = corBrownian(1, tree, form = ~scientific_name))
+model6 <- pglmm(relative_onset_times ~ scale (peak_freq) + 
+                  scale (vert_strat) + 
+                 (1 | sp__) + (1|site), 
+                data = consolidated_data, cov_ranef = list(sp = tree)) 
 
 summary(model6)
 confint (model6)
