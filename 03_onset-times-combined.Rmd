@@ -100,33 +100,22 @@ annotations <- annotations %>%
   left_join (., nautical_dawn, by = c('lat','lon', 'date')) #now, we have a dataframe with species, their onset times, dates, nautical dawn times, and sunrise times corresponding to each annotation at each site for both the seasons. 
 ```
 
-## Filtering species with adequate observations
-
-```{r}
-sp <- annotations %>%
-  group_by (species) %>%
-  summarize (n= n()) %>%
-  filter (!n<10) %>%
-  pull (species) #this helps us only retain those species for which we have atleast 10 observations, i.e. 89 species.
-```
-
 ## Calculating relative onset times of each observation, and adding species-specific information to this data
 
 ```{r}
 consolidated_data <- annotations %>%
-  filter (species %in% sp) %>% #filtering the selected species
   dplyr::select (site_id, filename, date, begin_clock_time, species, nauticalDawn, sunrise, peak_freq, season) %>%
 
 #adding data on site-wise vertifical stratification 
   left_join (., vert_strat, by = 'site_id') %>%
   
-#calculating relative onset times as the differences between timing of first vocalization of each species and the nautical dawn at corresponding site, and converting it into minutes by dividing the amount in seconds by 60, before summarizing it as a median
+#calculating relative onset times as the differences between timing of first vocalization of each species and the nautical dawn at corresponding site, and converting it into minutes by dividing the amount in seconds by 60
  mutate (begin_clock_time_hms = as.POSIXct(begin_clock_time, format = "%H:%M:%S")) %>% #converting to a Posixct object 
   mutate (begin_clock_time_hms = as_hms (begin_clock_time_hms)) %>% #retaining only hours and mins information
   mutate(relative_onset_times = as.numeric (begin_clock_time_hms-nauticalDawn), relative_onset_times = relative_onset_times / 60) %>% 
   group_by (species) %>%
  
-  #joining the species annotation codes dataset
+#joining the species annotation codes dataset
   inner_join (., species_codes, by = 'species') %>% 
   mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) %>% #updating the scientific name of yellow-browed bulbul
 
@@ -141,9 +130,10 @@ consolidated_data <- annotations %>%
   
 #adding trait information of foraging height, body mass, and trophic niche of the species
   left_join (., traits, by = c('scientific_name', 'common_name')) %>%
-  dplyr::select (site_id, date, filename, species, begin_clock_time_hms, nauticalDawn, sunrise, peak_freq, vert_strat, relative_onset_times, scientific_name, common_name, ebird_residuals, foraging_habit, territoriality, mass, trophic_niche, season)
-
-#This dataframes gives us data for 74 species (and it doesn't include any raptors).
+  dplyr::select (site_id, date, filename, species, begin_clock_time_hms, nauticalDawn, sunrise, peak_freq, vert_strat, relative_onset_times, scientific_name, common_name, ebird_residuals,
+                 foraging_habit, territoriality, mass, trophic_niche, season) 
+  
+#This dataframes gives us data for 75 species.
 
 write.csv (consolidated_data, 'results/consolidated_data.csv')
 ```

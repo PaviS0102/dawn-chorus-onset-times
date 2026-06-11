@@ -5,9 +5,8 @@ editor_options:
 
 # Eye size analyses 
 
-In the first section of the script, we will compare the eye size estimates obtained using eBird photos with Ausprey & Ritland 2024's eye morphology dataset from preserved museum specimens. This is followed by the second section of the script where we will focus on obtaining mean eye size estimates from citizen-science photographs for all species in our study.
+In the first section of the script, we will compare the eye size estimates obtained using photos from Macaulay Library with Ausprey & Ritland 2024's eye morphology dataset from preserved museum specimens. This is followed by the second section of the script where we will focus on obtaining mean eye size estimates from citizen-science photographs for all species in our study.
 
-#Section I
 ## Install required libraries  
 
 ```{r}
@@ -27,22 +26,18 @@ library(ggpubr)
 ## Loading the data
 
 ```{r}
-species_traits <- read.csv ('data/species-trait-dat.csv') #to obtain the list of required species
+species_traits <- read.csv ('data/species-trait-dat.csv') 
 eye_size_museum <- read.csv ('data/eye-size-museum.csv') #file with museum-derived eye size measurements
 eye_size_ebird_AR <- read.csv ('data/eye-size-ebird-A&R.csv') #file with Macaulay photo-derived eye size estimated, for species for which we have comparable measurements from museum specimens
 eye_size_ebird_not_in_AR <- read.csv ('data/eye-size-ebird-not-in-A&R.csv') #file with Macaulay photo-derived eye size estimates, for species for which we don't have comparable measurements from museum specimens
+annotations <- read.csv ('results/data.csv') 
 ```
 
-## Obtaining a list of species that are present and absent in the eye size dataset- only for reference
+## Updating the scientific name in the species_traits data
 
 ```{r}
-species <- data.frame (scientific_name = unique (species_traits$scientific_name))
-
-species_there <- data.frame (scientific_name = intersect (species$scientific_name, eye_size_museum$species_jetz))
-write.csv (species_there, 'results/species_in_acoustics_data_and_ausprey_ritland_data.csv')
-
-species_not_there <- data.frame (scientific_name = setdiff (species$scientific_name, eye_size_museum$species_jetz))
-write.csv (species_not_there, 'results/species_in_acoustics_data_not_in_ausprey_ritland_data.csv')
+species_traits <- species_traits %>%
+  mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) #updating the scientific name of yellow-browed bulbul
 ```
 
 ## Cleaning the eye size data obtained from eBird photos
@@ -56,9 +51,40 @@ eye_size_ebird_AR <- eye_size_ebird_AR %>%
   summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% #obtaining the mean eye size measurements for our species
   left_join (., species_traits, by = 'scientific_name') %>%
   dplyr::select (scientific_name, mean_eye_size, common_name, mass)  %>%
-  filter (!common_name %in% c('Shikra', 'Crested Goshawk','Black Kite', 'Brahminy Kite', 'Crested Serpent-Eagle')) %>% #removing raptors from the analyses
+  filter (common_name %in% annotations$common_name) %>%
+  ungroup ()
+
+eye_size_ebird_not_in_AR <- eye_size_ebird_not_in_AR %>%
+  na.omit () %>%
+  filter (!common_name %in% c("Red-wattled Lapwing", "Spotted Dove", "Malabar Parakeet", "Vernal Hanging-Parrot", "Plum-headed Parakeet", "Malabar Gray Hornbill")) %>% #removing 6 species for which either the error rates are too high, or eye sizes are not possible to obtain using photographs
+  rename (scientific_name = species) %>% 
+  dplyr::select (scientific_name, Eye_Size_in_mm_averaged, Error_of_bill_ratio) %>% 
+  group_by (scientific_name) %>%
+  mutate (Error_of_bill_ratio = as.numeric (Error_of_bill_ratio), Eye_Size_in_mm_averaged = as.numeric (Eye_Size_in_mm_averaged)) %>% #converting into numeric class
+  slice_min (order_by = abs(Error_of_bill_ratio), n = 10) %>% 
+  summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% 
+  left_join (., species_traits, by = 'scientific_name') %>%
+  dplyr::select (scientific_name, mean_eye_size, common_name, mass) %>% 
   ungroup ()
 ```
+
+## Obtaining a list of species that are present and absent in the eye size measurements dataset- only for reference
+
+```{r}
+#species present in annotations data for which Ausprey and Ritland HAVE eye size data from museum specimens
+species_in_data <- data.frame (scientific_name = intersect (unique (annotations$scientific_name), eye_size_museum$species_jetz)) #yields 38 species
+
+setdiff (species_in_data$scientific_name, eye_size_ebird_AR$scientific_name) #yields 2 species- Great Hornbill and Jungle Nightjar for which obtaining eye size estimates from photos was not possible. So, we have eye size measurements from museum and eye size estimates from photos for 36 species. 
+
+#species present in annotations data for which Ausprey and Ritland DO NOT HAVE eye size data from museum specimens
+species_not_in_data <- data.frame (scientific_name = setdiff (unique (annotations$scientific_name), eye_size_museum$species_jetz)) #yields 45 species
+
+setdiff (species_not_in_data$scientific_name, eye_size_ebird_not_in_AR$scientific_name) #yields 6 species- Red-wattled Lapwing, Malabar Grey Hornbill, Malabar Parakeet, Plum-headed Parakeet, Spotted Dove, and Vernal Hanging Parakeet, which were removed from the data because either the error rates were too high, or it was not possible to obtain estimates from photos. So, we have eye size estimates from 39 species. 
+
+#In total, we have photo-derived eye size estimates for 36 + 39 = 75 species.
+```
+
+#Section I
 
 ## Filtering the required species and obtaining the optical axial diameter measurements for each species (From Ausprey and Ritlands's dataset)
 
@@ -69,15 +95,16 @@ eye_size_museum <- eye_size_museum %>%
   filter (scientific_name %in% eye_size_ebird_AR$scientific_name) %>% #filtering the required species
   group_by (scientific_name) %>%
   summarize (mean_AD = mean (AD)) %>% #obtaining the mean axial diameter measurements for our species
- left_join (., species_traits, by = 'scientific_name') %>%
+  left_join (., species_traits, by = 'scientific_name') %>%
   dplyr::select (scientific_name, mean_AD, common_name, mass) %>%
+  filter (scientific_name %in% annotations$scientific_name) %>%
   ungroup ()
 ```
 
 ## Conducting the linear regression between eye size estimates/measurements and body mass 
 
 ```{r}
-#ebird-estimates:
+#macaulay-estimates:
 lm_ebird <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird_AR) #linear regression between the logs of mean eye sizes and body mass for each species  
 summary (lm_ebird) #to get the results 
 
@@ -106,7 +133,7 @@ cor_plot <- ggscatter(lm_results, x = 'museum_residuals', y = 'ebird_residuals',
           add = "reg.line", conf.int = TRUE, color = 'black',
           xlab = "Relative eye size measurements using Ausprey & Stanley 2024", ylab = "Relative eye size estimates using Macaulay Library", col = 'black', shape = 20, size = 10, label = 'common_name' , font.label = c(20, 'black'), 
           font.family = "Century Gothic", repel = TRUE) +
-  stat_cor (method = 'spearman', label.x.npc = "left", label.y.npc = "top", color ='black', size = 15, family = "Century Gothic") +
+  stat_cor (method = 'spearman', label.x = -0.20, label.y = 0.25, color ='black', size = 15, family = "Century Gothic") +
   theme_bw () +
   theme(text = element_text (family = "Century Gothic"),
   axis.text =  element_text (size = 25, family = "Century Gothic", colour = "black"),
@@ -125,30 +152,11 @@ ggsave(cor_plot,
 dev.off()
 ```
 
-#This plot shows a highly significant positive correlation (R = 0.74, p < 0.05) between the residuals of eye size estimates from citizen-science-derived photographs and measurements from museum specimens for 41 species (after removing raptors, i.e. Shikra, Crested Goshawk, Crested Serpent-Eagle, Black Kite, and Brahminy Kite). Thus, we extend the methodology of estimating eye size estimates from photographs to 38 species for which we do not have comparable museum-based data.
+#This plot shows a highly significant positive correlation (R = 0.75, p < 0.05) between the residuals of eye size estimates from citizen-science-derived photographs and measurements from museum specimens for 36 species. Thus, we use this methodology of estimating eye sizes from photographs for all 75 species.
 
 #Section II
-## Cleaning the eye size data (data for species with no comparable data)
 
-```{r}
-species_traits <- species_traits %>%
-  mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) #updating the scientific name of yellow-browed bulbul
-
-eye_size_ebird_not_in_AR <- eye_size_ebird_not_in_AR %>%
-  na.omit () %>%
-  filter (!common_name %in% c("Red-wattled Lapwing", "Spotted Dove", "Malabar Parakeet", "Vernal Hanging-Parrot", "Plum-headed Parakeet", "Malabar Gray Hornbill")) %>% #removing species for which either the error rates are too high, or eye sizes are not possible to obtain using photographs
-  rename (scientific_name = species) %>% 
-  dplyr::select (scientific_name, Eye_Size_in_mm_averaged, Error_of_bill_ratio) %>% 
-  group_by (scientific_name) %>%
-  mutate (Error_of_bill_ratio = as.numeric (Error_of_bill_ratio), Eye_Size_in_mm_averaged = as.numeric (Eye_Size_in_mm_averaged)) %>% #converting into numeric class
-  slice_min (order_by = abs(Error_of_bill_ratio), n = 10) %>% 
-  summarize (mean_eye_size = mean(Eye_Size_in_mm_averaged)) %>% 
-  left_join (., species_traits, by = 'scientific_name') %>%
-  dplyr::select (scientific_name, mean_eye_size, common_name, mass) %>% 
-  ungroup ()
-```
-
-## Combining both the eye size dataframes to have a single dataframe with all eye size estimates (for 79 species)
+## Combining both the eye size dataframes to have a single dataframe with all eye size estimates (for 75 species)
 
 ```{r}
 eye_size_ebird <- bind_rows (eye_size_ebird_AR, eye_size_ebird_not_in_AR)
@@ -156,7 +164,7 @@ eye_size_ebird <- bind_rows (eye_size_ebird_AR, eye_size_ebird_not_in_AR)
 write.csv (eye_size_ebird, 'results/eye_size_ebird.csv')
 ```
 
-## Then, we obtain the residual eye size estimates of all species, i.e 79 species
+## Then, we obtain the residuals of eye size estimates of all species, i.e 75 species
 
 ```{r}
 lm <- lm (log (mean_eye_size) ~ log (mass), data = eye_size_ebird) 

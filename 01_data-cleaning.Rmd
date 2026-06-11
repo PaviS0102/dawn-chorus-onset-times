@@ -47,10 +47,11 @@ summer_data <- summer_data %>%
   arrange (begin_clock_time) %>% #arranging by the time so that a species' first vocalization comes first
   filter(!duplicated(species)) #then filtering out the ones which come later 
 
-#interchanging GRNW (green warbler) with GRWA (greenish warbler)
+#interchanging GRNW (green warbler) with GRWA (greenish warbler), and changing the ebird code of Jungle Nightjar from JENI to JUNI
 summer_data <- summer_data %>%
   mutate (species = case_when (species == 'GRNW' ~ 'GRWA', 
                                species == 'GRWA' ~ 'GRNW',
+                               species == 'JENI' ~ 'JUNI',
                                TRUE ~ species)) #keep other species unchanged
 
 # Repeating the above steps with the winter data:
@@ -75,18 +76,49 @@ winter_data <- winter_data %>%
   arrange (begin_clock_time) %>% 
   filter(!duplicated(species)) 
 
-#interchanging GRNW (green warbler) with GRWA (greenish warbler)
+#interchanging GRNW (green warbler) with GRWA (greenish warbler), and changing the ebird code of Jungle Nightjar from JENI to JUNI
 winter_data <- winter_data %>%
   mutate (species = case_when (species == 'GRNW' ~ 'GRWA', 
                                species == 'GRWA' ~ 'GRNW',
+                               species == 'JENI' ~ 'JUNI',
                                TRUE ~ species)) 
 ```
 
-## Combining the data from both the seasons
+## Combining the data from both the seasons, and filtering species
 
 ```{r}
-annotations <- bind_rows (summer_data, winter_data) #final data
+annotations <- bind_rows (summer_data, winter_data) #combining the data for both seasons
+
+sp <- annotations %>%
+  group_by (species) %>%
+  summarize (n= n()) %>%
+  filter (!n<10) %>%
+  pull (species) #this gives us a list of species for which we have atleast 10 observations, i.e. 88 species
+
+annotations <- annotations %>%
+  filter (!species %in% 'UK') %>% #filtering unknown observations/species
+  filter (species %in% sp) %>% #filtering the selected species
+  filter (!species %in% c('SHIK', 'ISOW', 'BRBO', 'SBEO', 'CSEA')) #removing raptors, i.e. Indian Scops-Owl, Brown Boobook, Crested Serpent Eagle, Spot-bellied Eagle-Owl and Shikra from further analyses
+```
+
+## Adding scientific names and common names to the data
+
+```{r}
+species_codes <- read.csv("data/species-annotation-codes.csv") #loading the species annotation codes
+
+species_codes <- species_codes %>%
+  rename (species = species_annotation_codes) #changing the column name so that it can be appended with the annotations data
+
+#joining the species annotation codes dataset
+annotations <- annotations %>%
+  inner_join (., species_codes, by = 'species') %>% 
+  mutate(scientific_name = recode(scientific_name, "Iole indica" = "Acritillas indica")) #updating the scientific name of yellow-browed bulbul
+  
+#This results in a dataframe with 83 species for which we have data on onset times.
 
 write.csv (annotations, 'results/data.csv')
 ```
+
+
+
 
