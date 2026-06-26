@@ -35,6 +35,8 @@ library(phytools)
 library(phangorn)
 library(phyr)
 library(psych)
+library(cowplot)
+library(DHARMa)
 ```
 
 ## Reading the required data
@@ -47,14 +49,14 @@ consolidated_data <- read.csv ('results/consolidated_data.csv')
 
 ```{r}
 consolidated_data <- consolidated_data %>%
-  filter(trophic_niche != "Aquatic predator") %>%
-  filter(trophic_niche != "Granivore") %>%
-  filter(trophic_niche != "Nectarivore") %>%
-  filter(trophic_niche != "Vertivore") %>%
-  filter (foraging_habit != "AER") %>%
-  filter (foraging_habit != "AQU") #removing trophic niches and foraging habit categories that are poorly represented (Aquatic predator- 1 sp; Granivore- 1 sp; Nectarivore- 2 sp; Vertivore- 3 sp; AQU- 1 sp; AER- 1 sp)
-  
-#This leaves us with 67 species for downstream analyses.
+  mutate (trophic_niche = case_when (trophic_niche %in% "Aquatic predator" ~ "Predator",
+                                        trophic_niche %in% "Vertivore" ~ "Predator",
+                                        trophic_niche %in% "Invertivore" ~ "Predator",
+                                        trophic_niche %in% "Frugivore" ~ "Herbivore",
+                                        trophic_niche %in% "Nectarivore" ~ "Herbivore",
+                                        trophic_niche %in% "Granivore" ~ "Herbivore", .default = trophic_niche)) %>% #clubbing trophic niche categories
+   filter (foraging_habit != "AER") %>%
+  filter (foraging_habit != "AQU")
 ```
 
 ## Extracting the list of species (scientific names) for phylogeny
@@ -116,13 +118,15 @@ consolidated_data <- consolidated_data %>%
   rename(., site = site_id)
 
 # checking the distribution of onset times to help decide the family for pglmm
-hist (consolidated_data$relative_onset_times)
+hist (consolidated_data$relative_onset_times) 
 abline (v = mean(consolidated_data$relative_onset_times))
 
-#Relative onset times ~ trophic niche (adjustment sets: Vegetation structure)
-model1 <- pglmm(relative_onset_times ~ relevel (factor(trophic_niche), ref = 'Frugivore') +
+#PGLMM models: 
+
+#Model 1: Relative onset times ~ trophic niche (adjustment sets: Vegetation structure)
+model1 <- pglmm(relative_onset_times ~ relevel (factor(trophic_niche), ref = 'Herbivore') +
                  scale (vert_strat) + 
-                 (1 | sp__) + (1|site), 
+                 (1 | sp__) + (1|site),
                 data = consolidated_data, 
                 family = "gaussian", cov_ranef = list(sp = phylo_vcv), REML = TRUE,  verbose = FALSE)
 summary (model1)
@@ -131,6 +135,7 @@ residuals_model1 <- residuals(model1)
 fitted_values1 <- fitted(model1)
 
 #model diagnostics
+#1) Residuals vs fitted values plot to check for non-linear patterns
 diag1a <- data.frame(Fitted = fitted_values1, Residuals = residuals_model1) %>%
   ggplot(aes(x = Fitted, y = Residuals)) +
   geom_point(alpha = 0.6, size = 1.5, shape = 20) +
@@ -145,6 +150,7 @@ diag1a <- data.frame(Fitted = fitted_values1, Residuals = residuals_model1) %>%
     text = element_text(family = 'Century Gothic'), 
     axis.title = element_text(family = 'Century Gothic', size = 12))
 
+#2) Q-Q plot to check if the residuals are normally distributed
 diag1b <- data.frame(Residuals = residuals_model1) %>%
   ggplot(aes(sample = Residuals)) +
   stat_qq(size = 1.5, alpha = 0.6, shape = 20) +
@@ -157,23 +163,25 @@ diag1b <- data.frame(Residuals = residuals_model1) %>%
     axis.text.x = element_text(family = 'Century Gothic', size = 10), 
     text = element_text(family = 'Century Gothic'), 
     axis.title = element_text(family = 'Century Gothic', size = 12))
-        
-plot_grid (diag1a, diag1b)
 
-rr2::R2(model1) #R2 to evaluate how well the model fits the data
+plot_grid (diag1a, diag1b) 
 
-#Relative onset times ~ territoriality (adjustment sets: none)
+#3) Checking model residuals using a simulation-based approach by DHARMa package
+resids1 <- DHARMa::simulateResiduals(model1, plot = FALSE, ntry = 50)
+plot(resids1)
+
+#Model 2: Relative onset times ~ territoriality (adjustment sets: none)
 model2 <- pglmm(relative_onset_times ~ relevel(factor(territoriality), ref = "Non-territorial") + 
                  (1 | sp__) + (1|site), 
                 data = consolidated_data, family = "gaussian", cov_ranef = list(sp = phylo_vcv), REML = TRUE,  verbose = FALSE)
 
 summary(model2)
-confint (model2)
 
 residuals_model2 <- residuals(model2)
 fitted_values2 <- fitted(model2)
 
 #model diagnostics
+#1) Residuals vs fitted values plot to check for non-linear patterns
 diag2a <- data.frame(Fitted = fitted_values2, Residuals = residuals_model2) %>%
   ggplot(aes(x = Fitted, y = Residuals)) +
   geom_point(alpha = 0.6, size = 1.5) +
@@ -188,6 +196,7 @@ diag2a <- data.frame(Fitted = fitted_values2, Residuals = residuals_model2) %>%
     text = element_text(family = 'Century Gothic'), 
     axis.title = element_text(family = 'Century Gothic', size = 12))
 
+#2) Q-Q plot to check if the residuals are normally distributed
 diag2b <- data.frame(Residuals = residuals_model2) %>%
   ggplot(aes(sample = Residuals)) +
   stat_qq(size = 1.5, alpha = 0.6) +
@@ -201,22 +210,26 @@ diag2b <- data.frame(Residuals = residuals_model2) %>%
     text = element_text(family = 'Century Gothic'), 
     axis.title = element_text(family = 'Century Gothic', size = 12))
 
-plot_grid (diag2a, diag2b)
+plot_grid (diag2a, diag2b) 
 
-#Relative onset times ~ foraging height (adjustment sets: Trophic niche, Vegetation structure)
+#3) Checking model residuals using a simulation-based approach by DHARMa package
+resids2 <- DHARMa::simulateResiduals(model2, plot = FALSE, ntry = 50)
+plot(resids2)
+
+#Model 3: Relative onset times ~ foraging height (adjustment sets: Trophic niche, Vegetation structure)
 model3 <- pglmm(relative_onset_times ~ relevel(factor(foraging_habit), ref = "GRD") +
-                relevel (factor(trophic_niche), ref = 'Frugivore') +
+                relevel (factor(trophic_niche), ref = 'Herbivore') +
                  scale (vert_strat) + 
                  (1 | sp__) + (1|site), 
                 data = consolidated_data, family = "gaussian", cov_ranef = list(sp = phylo_vcv), REML = TRUE,  verbose = FALSE)
 
 summary(model3)
-confint (model3)
 
 residuals_model3 <- residuals(model3)
 fitted_values3 <- fitted(model3)
 
 #model diagnostics
+#1) Residuals vs fitted values plot to check for non-linear patternsmodel diagnostics
 diag3a <- data.frame(Fitted = fitted_values3, Residuals = residuals_model3) %>%
   ggplot(aes(x = Fitted, y = Residuals)) +
   geom_point(alpha = 0.6, size = 1.5) +
@@ -227,6 +240,7 @@ diag3a <- data.frame(Fitted = fitted_values3, Residuals = residuals_model3) %>%
   theme_classic() +
   theme(plot.title = element_text(size = 12, face = "bold"))
 
+#2) Q-Q plot to check if the residuals are normally distributed
 diag3b <- data.frame(Residuals = residuals_model3) %>%
   ggplot(aes(sample = Residuals)) +
   stat_qq(size = 1.5, alpha = 0.6) +
@@ -238,8 +252,11 @@ diag3b <- data.frame(Residuals = residuals_model3) %>%
 
 plot_grid (diag3a, diag3b)
 
+#3) Checking model residuals using a simulation-based approach by DHARMa package
+resids3 <- DHARMa::simulateResiduals(model3, plot = FALSE, ntry = 50)
+plot(resids3)
 
-#Relative onset times ~ eye size (adjustment sets: Foraging Height, Vegetation Structure)
+#Model 4: Relative onset times ~ eye size (adjustment sets: Foraging Height, Vegetation Structure)
 model4 <- pglmm(relative_onset_times ~ ebird_residuals + 
                 relevel(factor(foraging_habit), ref = "GRD") +
                 scale (vert_strat) + 
@@ -247,12 +264,12 @@ model4 <- pglmm(relative_onset_times ~ ebird_residuals +
                 data = consolidated_data, family = "gaussian", cov_ranef = list(sp = phylo_vcv), REML = TRUE,  verbose = FALSE) 
 
 summary(model4)
-confint (model4)
 
 residuals_model4 <- residuals(model4)
 fitted_values4 <- fitted(model4)
 
 #model diagnostics
+#1) Residuals vs fitted values plot to check for non-linear patterns
 diag4a <- data.frame(Fitted = fitted_values4, Residuals = residuals_model4) %>%
   ggplot(aes(x = Fitted, y = Residuals)) +
   geom_point(alpha = 0.6, size = 1.5) +
@@ -263,6 +280,7 @@ diag4a <- data.frame(Fitted = fitted_values4, Residuals = residuals_model4) %>%
   theme_classic() +
   theme(plot.title = element_text(size = 12, face = "bold"))
 
+#2) Q-Q plot to check if the residuals are normally distributed
 diag4b <- data.frame(Residuals = residuals_model4) %>%
   ggplot(aes(sample = Residuals)) +
   stat_qq(size = 1.5, alpha = 0.6) +
@@ -274,18 +292,22 @@ diag4b <- data.frame(Residuals = residuals_model4) %>%
 
 plot_grid (diag4a, diag4b)
 
-#Relative onset times ~ vegetation structure (adjustment sets: none)
+#3) Checking model residuals using a simulation-based approach by DHARMa package
+resids4 <- DHARMa::simulateResiduals(model4, plot = FALSE, ntry = 50)
+plot(resids4)
+
+#Model 5: Relative onset times ~ vegetation structure (adjustment sets: none)
 model5 <- pglmm(relative_onset_times ~ scale (vert_strat) + 
                  (1 | sp__) + (1|site), 
                 data = consolidated_data, family = "gaussian", cov_ranef = list(sp = phylo_vcv), REML = TRUE,  verbose = FALSE) 
 
 summary(model5)
-confint (model5)
 
 residuals_model5 <- residuals(model5)
 fitted_values5 <- fitted(model5)
 
 #model diagnostics
+#1) Residuals vs fitted values plot to check for non-linear patterns
 diag5a <- data.frame(Fitted = fitted_values5, Residuals = residuals_model5) %>%
   ggplot(aes(x = Fitted, y = Residuals)) +
   geom_point(alpha = 0.6, size = 1.5) +
@@ -296,6 +318,7 @@ diag5a <- data.frame(Fitted = fitted_values5, Residuals = residuals_model5) %>%
   theme_classic() +
   theme(plot.title = element_text(size = 12, face = "bold"))
 
+#2) Q-Q plot to check if the residuals are normally distributed
 diag5b <- data.frame(Residuals = residuals_model5) %>%
   ggplot(aes(sample = Residuals)) +
   stat_qq(size = 1.5, alpha = 0.6) +
@@ -307,19 +330,23 @@ diag5b <- data.frame(Residuals = residuals_model5) %>%
 
 plot_grid (diag5a, diag5b)
 
-#Relative onset times ~ peak frequency (adjustment sets: Vegetation Structure)
+#3) Checking model residuals using a simulation-based approach by DHARMa package
+resids5 <- DHARMa::simulateResiduals(model5, plot = FALSE, ntry = 50)
+plot(resids5)
+
+#Model 6: Relative onset times ~ peak frequency (adjustment sets: Vegetation Structure)
 model6 <- pglmm(relative_onset_times ~ scale (peak_freq) + 
                   scale (vert_strat) + 
                  (1 | sp__) + (1|site), 
                 data = consolidated_data, family = "gaussian", cov_ranef = list(sp = phylo_vcv), REML = TRUE,  verbose = FALSE)
 
 summary(model6)
-confint (model6)
 
 residuals_model6 <- residuals(model6)
 fitted_values6 <- fitted(model6)
 
 #model diagnostics
+#1) Residuals vs fitted values plot to check for non-linear patterns
 diag6a <- data.frame(Fitted = fitted_values6, Residuals = residuals_model6) %>%
   ggplot(aes(x = Fitted, y = Residuals)) +
   geom_point(alpha = 0.6, size = 1.5) +
@@ -330,6 +357,7 @@ diag6a <- data.frame(Fitted = fitted_values6, Residuals = residuals_model6) %>%
   theme_classic() +
   theme(plot.title = element_text(size = 12, face = "bold"))
 
+#2) Q-Q plot to check if the residuals are normally distributed
 diag6b <- data.frame(Residuals = residuals_model6) %>%
   ggplot(aes(sample = Residuals)) +
   stat_qq(size = 1.5, alpha = 0.6) +
@@ -341,30 +369,23 @@ diag6b <- data.frame(Residuals = residuals_model6) %>%
 
 plot_grid (diag6a, diag6b)
 
-ggplot(consolidated_data, aes(x= peak_freq, y= relative_onset_times)) +
-  geom_point(shape = 20, size = 5) +
-  geom_abline(intercept = coef(model6)[1],
-              slope = coef(model4)[2]) +
- labs(y = 'Relative onset times (minutes)', x = 'Peak Frequency (Hz)') +
-  theme_bw() +
-  theme(axis.text.y = element_markdown(family = 'Century Gothic', size = 12),
-    axis.text.x = element_text(family = 'Century Gothic', size = 12), 
-    text = element_text(family = 'Century Gothic'), 
-    axis.title = element_text(family = 'Century Gothic', size = 18, face = 'bold'))
-
-ggplot(consolidated_data, aes(x = peak_freq, y = relative_onset_times)) +
-    geom_point(alpha = 0.6, color = "steelblue", size = 1.5) +
-    geom_smooth(method = "lm", color = "red", fill = "red", alpha = 0.2, linewidth = 1.2) +
-    labs(
-      x = "Peak frequency (Hz)",
-      y = "Relative Onset times (mins)") +
-  annotate("text", x = 4500,
-     y = 215,
-     label = paste ("estimate = 5.495; std error = 1.337; p = 3.992e-05"),
-    color = "black",
-     family = "Century Gothic", size = 5)
+#3) Checking model residuals using a simulation-based approach by DHARMa package
+resids6 <- DHARMa::simulateResiduals(model6, plot = FALSE, ntry = 50)
+plot(resids6)
 ```
 
+```{r}
+#ggplot(consolidated_data, aes(x= peak_freq, y= relative_onset_times)) +
+ # geom_point(shape = 20, size = 5) +
+  #geom_abline(intercept = coef(model6)[1],
+  #            slope = coef(model4)[2]) +
+ #labs(y = 'Relative onset times (minutes)', x = 'Peak Frequency (Hz)') +
+  #theme_bw() +
+  #theme(axis.text.y = element_markdown(family = 'Century Gothic', size = 12),
+  #  axis.text.x = element_text(family = 'Century Gothic', size = 12), 
+  #  text = element_text(family = 'Century Gothic'), 
+   # axis.title = element_text(family = 'Century Gothic', size = 18, face = 'bold'))
+```
 
 
 
